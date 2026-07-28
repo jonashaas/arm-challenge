@@ -5,8 +5,9 @@ A static 28-day arm challenge tracker made with plain HTML, CSS and JavaScript.
 **Live app:** https://jonashaas.github.io/arm-challenge/
 
 Each day logs 5–6 triceps sets followed by 5–6 biceps sets, including reps and
-kg per arm. Reps can range from 0–30. One row represents both arms, so daily volume is calculated as
-`kg × reps × 2`. A new training pre-fills kg and reps from the most recent
+kg per arm. The target is 9–12 reps per set; the logger accepts 0–30 so the
+record stays honest. One row represents both arms, so daily volume is calculated
+as `kg × reps × 2`. A new training pre-fills kg and reps from the most recent
 completed day while leaving every set unchecked.
 
 Days with fewer than 5 sets for either muscle can be saved as partial. Partial
