@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Bigger Arm Challenge — a local-first 28-day biceps and triceps tracker."
+    />
+    <title>Bigger Arm Challenge</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Bigger Arm Challenge home">
+        <span class="brand-mark">B</span>
+        <span>BIGGER ARM CHALLENGE</span>
+      </a>
+      <div class="header-actions">
+        <button class="text-button" id="exportButton" type="button">Export</button>
+        <label class="text-button file-button" for="importInput">Import</label>
+        <input id="importInput" type="file" accept="application/json" hidden />
+        <button class="icon-button" id="settingsButton" type="button" aria-label="Open settings">
+          •••
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">THE 28-DAY EXPERIMENT</p>
+          <h1>Show up.<br /><span>Log the work.</span></h1>
+          <p class="hero-subtitle">
+            Triceps first. Biceps second. 5–6 sets each. 0–30 reps. Every day.
+          </p>
+        </div>
+
+        <div class="hero-status">
+          <div class="progress-orbit" id="progressOrbit">
+            <div class="progress-inner">
+              <span class="progress-number" id="completedDays">0</span>
+              <span class="progress-label">OF 28 DAYS</span>
+            </div>
+          </div>
+          <button class="primary-button" id="todayButton" type="button">
+            <span id="todayButtonLabel">Start day 01</span>
+            <span aria-hidden="true">↗</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="stats" aria-label="Challenge statistics">
+        <article class="stat">
+          <span class="stat-label">TOTAL VOLUME</span>
+          <strong id="totalVolume">0 kg</strong>
+          <span class="stat-unit" id="totalSets">0 sets logged</span>
+        </article>
+        <article class="stat">
+          <span class="stat-label">TOTAL REPS</span>
+          <strong id="totalReps">0</strong>
+          <span class="stat-unit">controlled</span>
+        </article>
+        <article class="stat">
+          <span class="stat-label">ARM CHANGE</span>
+          <strong class="arm-change-pair" id="armChange">L — / R —</strong>
+          <span class="stat-unit" id="armChangeUnit">needs 2 check-ins</span>
+        </article>
+        <article class="stat">
+          <span class="stat-label">CURRENT DAY</span>
+          <strong id="currentDayStat">01</strong>
+          <span class="stat-unit" id="challengeDate">not started</span>
+        </article>
+      </section>
+
+      <section class="tracker-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">DAILY LOG</p>
+            <h2>28 days. Four weeks.</h2>
+          </div>
+          <div class="legend" aria-label="Tracker legend">
+            <span><i class="legend-dot complete"></i>Done</span>
+            <span><i class="legend-dot partial"></i>Partial</span>
+            <span><i class="legend-dot current"></i>Current</span>
+            <span><i class="legend-dot checkin"></i>Check-in</span>
+          </div>
+        </div>
+
+        <div class="challenge-progress">
+          <div class="challenge-progress-copy">
+            <span>CHALLENGE PROGRESS</span>
+            <strong id="progressBarLabel">0 / 28 days logged</strong>
+          </div>
+          <div
+            class="progress-track"
+            id="progressBar"
+            role="progressbar"
+            aria-label="Challenge progress"
+            aria-valuemin="0"
+            aria-valuemax="28"
+            aria-valuenow="0"
+          >
+            <span id="progressBarFill"></span>
+          </div>
+        </div>
+
+        <div class="day-grid" id="dayGrid" aria-label="28 day challenge tracker"></div>
+      </section>
+
+      <section class="checkin-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">PROOF OF WORK</p>
+            <h2>Weekly check-ins.</h2>
+          </div>
+          <p class="section-note">
+            Same place. Same light. Same measuring method.
+          </p>
+        </div>
+        <div class="checkin-grid" id="checkinGrid"></div>
+      </section>
+    </main>
+
+    <footer>
+      <span>BIGGER ARM CHALLENGE</span>
+      <span>Your data stays local.</span>
+    </footer>
+
+    <dialog class="sheet" id="dayDialog">
+      <form method="dialog" class="sheet-card" id="dayForm">
+        <div class="sheet-top">
+          <div>
+            <p class="eyebrow" id="dayDialogEyebrow">DAILY LOG</p>
+            <h2 id="dayDialogTitle">Day 01</h2>
+          </div>
+          <button class="close-button" id="closeDayButton" type="button" aria-label="Close">×</button>
+        </div>
+
+        <div class="day-summary">
+          <span><strong id="loggedTricepsCount">0</strong> / 5 triceps</span>
+          <span><strong id="loggedBicepsCount">0</strong> / 5 biceps</span>
+          <span><strong id="loggedRepsCount">0</strong> reps</span>
+          <span><strong id="loggedVolumeCount">0</strong> kg volume</span>
+        </div>
+
+        <section class="muscle-block">
+          <header class="muscle-block-heading">
+            <div>
+              <span class="block-order">01</span>
+              <h3>Triceps</h3>
+            </div>
+            <span id="tricepsBlockTotal">0 sets · 0 kg</span>
+          </header>
+          <div class="set-list" id="tricepsSetList"></div>
+        </section>
+
+        <section class="muscle-block">
+          <header class="muscle-block-heading">
+            <div>
+              <span class="block-order">02</span>
+              <h3>Biceps</h3>
+            </div>
+            <span id="bicepsBlockTotal">0 sets · 0 kg</span>
+          </header>
+          <div class="set-list" id="bicepsSetList"></div>
+        </section>
+
+        <p class="form-hint">
+          One row covers both arms. Enter kg for one arm. Volume = kg × reps × 2.
+        </p>
+
+        <div class="sheet-actions">
+          <button class="secondary-button danger-text" id="clearDayButton" type="button">
+            Clear day
+          </button>
+          <div class="save-group">
+            <button class="secondary-button partial-save" id="savePartialDayButton" type="button">
+              Save partial
+            </button>
+            <button class="primary-button save-button" id="saveDayButton" type="button">
+              Save day
+            </button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="sheet" id="checkinDialog">
+      <form method="dialog" class="sheet-card checkin-form" id="checkinForm">
+        <div class="sheet-top">
+          <div>
+            <p class="eyebrow">WEEKLY CHECK-IN</p>
+            <h2 id="checkinDialogTitle">Day 01 / Baseline</h2>
+          </div>
+          <button class="close-button" id="closeCheckinButton" type="button" aria-label="Close">×</button>
+        </div>
+
+        <aside class="measure-note">
+          <span>MEASUREMENT RULE</span>
+          <p>
+            <strong>Cold + flexed.</strong> Bend your elbow about 90°, flex, and
+            measure the widest point. Keep the tape level and snug—not squeezing.
+            Always measure before training at roughly the same time.
+          </p>
+        </aside>
+
+        <div class="measurement-grid">
+          <label>
+            <span>Left arm</span>
+            <span class="input-with-unit">
+              <input id="leftArmInput" type="number" min="10" max="80" step="0.1" inputmode="decimal" />
+              <small>cm</small>
+            </span>
+          </label>
+          <label>
+            <span>Right arm</span>
+            <span class="input-with-unit">
+              <input id="rightArmInput" type="number" min="10" max="80" step="0.1" inputmode="decimal" />
+              <small>cm</small>
+            </span>
+          </label>
+        </div>
+
+        <label class="photo-drop" id="photoDrop" for="photoInput">
+          <input id="photoInput" type="file" accept="image/*" hidden />
+          <img id="photoPreview" alt="Weekly progress preview" hidden />
+          <span class="photo-prompt" id="photoPrompt">
+            <b>Add progress photo</b>
+            <small>JPG or PNG · compressed locally</small>
+          </span>
+        </label>
+
+        <label class="notes-field">
+          <span>Note <em>optional</em></span>
+          <textarea id="noteInput" rows="3" maxlength="240" placeholder="What changed this week?"></textarea>
+        </label>
+
+        <div class="sheet-actions">
+          <button class="secondary-button danger-text" id="clearCheckinButton" type="button">
+            Clear check-in
+          </button>
+          <button class="primary-button save-button" id="saveCheckinButton" type="button">
+            Save check-in
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="sheet settings-sheet" id="settingsDialog">
+      <div class="sheet-card">
+        <div class="sheet-top">
+          <div>
+            <p class="eyebrow">LOCAL DATA</p>
+            <h2>Settings</h2>
+          </div>
+          <button class="close-button" id="closeSettingsButton" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="settings-copy">
+          <p>
+            Choose one JSON file once. Every saved change then rewrites that backup
+            automatically.
+          </p>
+        </div>
+        <div class="backup-status" id="backupStatus" data-state="idle">
+          <i aria-hidden="true"></i>
+          <span>Checking automatic backup…</span>
+        </div>
+        <button class="primary-button full-button" id="connectBackupButton" type="button">
+          Connect automatic backup
+        </button>
+        <button class="secondary-button full-button" id="settingsExportButton" type="button">
+          Download separate snapshot
+        </button>
+        <button class="secondary-button full-button reset-button" id="resetButton" type="button">
+          Reset entire experiment
+        </button>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
