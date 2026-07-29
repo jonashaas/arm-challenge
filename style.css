@@ -843,6 +843,55 @@ footer {
   color: var(--ink);
 }
 
+.rest-timer {
+  position: sticky;
+  top: -1px;
+  z-index: 3;
+  min-height: 58px;
+  margin-bottom: 22px;
+  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: 0 8px 18px rgba(17, 17, 15, 0.12);
+}
+
+.rest-timer-label,
+.rest-timer-state {
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rest-timer strong {
+  color: var(--acid);
+  font-size: 31px;
+  line-height: 1;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
+}
+
+.rest-timer-state {
+  justify-self: end;
+  color: #aaa9a2;
+}
+
+.rest-timer.inactive {
+  border-color: var(--line);
+  background: var(--paper-strong);
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.rest-timer.inactive strong,
+.rest-timer.inactive .rest-timer-state {
+  color: var(--muted);
+}
+
 .muscle-block {
   margin-top: 30px;
 }
@@ -1461,6 +1510,15 @@ em {
 
   .sheet-top h2 {
     font-size: 42px;
+  }
+
+  .rest-timer {
+    grid-template-columns: auto auto;
+  }
+
+  .rest-timer-state {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .set-row {

@@ -64,6 +64,9 @@ let toastTimer;
 let backupHandle = null;
 let backupReadyPromise;
 let lastBackupSynced = false;
+let restTimerStartedAt = null;
+let restTimerInterval = null;
+let restTimerDay = null;
 
 const elements = {
   dayGrid: document.querySelector("#dayGrid"),
@@ -77,6 +80,9 @@ const elements = {
   loggedBicepsCount: document.querySelector("#loggedBicepsCount"),
   loggedRepsCount: document.querySelector("#loggedRepsCount"),
   loggedVolumeCount: document.querySelector("#loggedVolumeCount"),
+  restTimer: document.querySelector("#restTimer"),
+  restTimerValue: document.querySelector("#restTimerValue"),
+  restTimerState: document.querySelector("#restTimerState"),
   tricepsBlockTotal: document.querySelector("#tricepsBlockTotal"),
   bicepsBlockTotal: document.querySelector("#bicepsBlockTotal"),
   completedDays: document.querySelector("#completedDays"),
@@ -664,6 +670,9 @@ function formatArmChange(change) {
 }
 
 function openDay(day) {
+  if (restTimerDay !== day) {
+    resetRestTimer();
+  }
   activeDay = day;
   const saved = state.days[day]?.groups;
   draftGroups = saved ? structuredClone(saved) : createPrefilledGroups(day);
@@ -672,6 +681,45 @@ function openDay(day) {
     day === getCurrentDay() ? "CURRENT DAY" : "DAILY LOG";
   renderSetLists();
   elements.dayDialog.showModal();
+}
+
+function formatRestTime(elapsedSeconds) {
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function updateRestTimer() {
+  if (!restTimerStartedAt) return;
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((Date.now() - restTimerStartedAt) / 1000),
+  );
+  elements.restTimerValue.textContent = formatRestTime(elapsedSeconds);
+  elements.restTimerState.textContent =
+    elapsedSeconds < 60
+      ? "Resting"
+      : `${Math.floor(elapsedSeconds / 60)} min rest`;
+}
+
+function startRestTimer() {
+  restTimerStartedAt = Date.now();
+  restTimerDay = activeDay;
+  elements.restTimer.classList.remove("inactive");
+  updateRestTimer();
+
+  window.clearInterval(restTimerInterval);
+  restTimerInterval = window.setInterval(updateRestTimer, 1000);
+}
+
+function resetRestTimer() {
+  window.clearInterval(restTimerInterval);
+  restTimerStartedAt = null;
+  restTimerInterval = null;
+  restTimerDay = null;
+  elements.restTimer.classList.add("inactive");
+  elements.restTimerValue.textContent = "00:00";
+  elements.restTimerState.textContent = "Complete a set to start";
 }
 
 function renderSetLists() {
@@ -714,8 +762,12 @@ function renderGroupList(muscle, container) {
     const enableButton = row.querySelector(".set-enable");
 
     weightInput.addEventListener("input", (event) => {
+      const wasLogged = set.logged;
       set.weight = event.target.value;
       set.logged = Number(set.weight) > 0;
+      if (!wasLogged && set.logged) {
+        startRestTimer();
+      }
       setVolume.textContent = formatNumber(getSetVolume(set));
       row.classList.toggle("logged", set.logged);
       enableButton.setAttribute(
@@ -737,6 +789,9 @@ function renderGroupList(muscle, container) {
 
     enableButton.addEventListener("click", () => {
       set.logged = !set.logged;
+      if (set.logged) {
+        startRestTimer();
+      }
       renderSetLists();
       if (set.logged && !Number(set.weight)) {
         const targetContainer =
@@ -824,6 +879,7 @@ async function storeTrainingDay(complete) {
 
 async function clearDay() {
   if (!state.days[activeDay]) {
+    resetRestTimer();
     draftGroups = createPrefilledGroups(activeDay);
     renderSetLists();
     return;
@@ -832,6 +888,7 @@ async function clearDay() {
   if (!window.confirm(`Clear all data for day ${activeDay}?`)) return;
   delete state.days[activeDay];
   await persist();
+  resetRestTimer();
   draftGroups = createPrefilledGroups(activeDay);
   renderSetLists();
   render();
@@ -984,6 +1041,7 @@ async function resetChallenge() {
   if (confirmation !== "RESET") return;
   localStorage.removeItem(STORAGE_KEY);
   state = emptyState();
+  resetRestTimer();
   lastBackupSynced = await syncAutomaticBackup({ allowSetup: false });
   elements.settingsDialog.close();
   render();
