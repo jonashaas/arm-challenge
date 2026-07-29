@@ -24,3 +24,9 @@ Progress and compressed weekly photos are stored in browser `localStorage`.
 On the first saved change, Chrome asks for one JSON backup file. After that,
 every saved day, check-in, import, clear, or reset automatically rewrites that
 file. The regular **Export** button remains available for extra snapshots.
+
+## Credits
+
+The favicon uses the
+[Biceps Flexed icon](https://lucide.dev/icons/biceps-flexed) from
+[Lucide](https://lucide.dev), licensed under the ISC License.
