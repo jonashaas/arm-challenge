@@ -1,5 +1,5 @@
 const STORAGE_KEY = "arm32.challenge.v1";
-const DATA_VERSION = 2;
+const DATA_VERSION = 3;
 const CHALLENGE_DAYS = 28;
 const BACKUP_DB_NAME = "arm32.file-backup";
 const BACKUP_STORE_NAME = "handles";
@@ -15,8 +15,8 @@ const createSet = () => ({
 });
 
 const createGroups = () => ({
-  Triceps: Array.from({ length: 6 }, createSet),
-  Biceps: Array.from({ length: 6 }, createSet),
+  Triceps: Array.from({ length: 5 }, createSet),
+  Biceps: Array.from({ length: 5 }, createSet),
 });
 
 function createPrefilledGroups(day) {
@@ -55,6 +55,7 @@ const emptyState = () => ({
   checkins: {},
 });
 
+let didMigrateOnLoad = false;
 let state = loadState();
 let activeDay = 1;
 let activeCheckinDay = 1;
@@ -118,6 +119,7 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (saved?.days && saved?.checkins) {
       const migrated = migrateState(saved);
+      didMigrateOnLoad = saved.version !== DATA_VERSION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
     }
@@ -128,14 +130,6 @@ function loadState() {
 }
 
 function migrateState(saved) {
-  if (saved.version === DATA_VERSION) {
-    return {
-      ...emptyState(),
-      ...saved,
-      checkins: remapCheckins(saved.checkins),
-    };
-  }
-
   const migrated = {
     ...emptyState(),
     startedAt: saved.startedAt || null,
@@ -146,21 +140,37 @@ function migrateState(saved) {
     const groups = createGroups();
     const positions = { Triceps: 0, Biceps: 0 };
 
-    (record.sets || []).forEach((oldSet) => {
-      const muscle = oldSet.muscle === "Biceps" ? "Biceps" : "Triceps";
-      const index = positions[muscle];
-      if (index >= 6) return;
-      groups[muscle][index] = {
-        logged: Boolean(oldSet.logged),
-        reps: normaliseReps(oldSet.reps),
-        weight: oldSet.weight || "",
-      };
-      positions[muscle] += 1;
-    });
+    if (record.groups) {
+      MUSCLE_GROUPS.forEach((muscle) => {
+        (record.groups[muscle] || []).slice(0, 5).forEach((oldSet, index) => {
+          groups[muscle][index] = {
+            logged: Boolean(oldSet.logged),
+            reps: normaliseReps(oldSet.reps),
+            weight: oldSet.weight || "",
+          };
+        });
+      });
+    } else {
+      (record.sets || []).forEach((oldSet) => {
+        const muscle = oldSet.muscle === "Biceps" ? "Biceps" : "Triceps";
+        const index = positions[muscle];
+        if (index >= 5) return;
+        groups[muscle][index] = {
+          logged: Boolean(oldSet.logged),
+          reps: normaliseReps(oldSet.reps),
+          weight: oldSet.weight || "",
+        };
+        positions[muscle] += 1;
+      });
+    }
+
+    const complete = isCompleteGroups(groups);
+    const hasLoggedSets = getLoggedSetsFromGroups(groups).length > 0;
 
     migrated.days[day] = {
       groups,
-      complete: isCompleteGroups(groups),
+      complete,
+      partial: !complete && hasLoggedSets,
       updatedAt: record.updatedAt || null,
     };
   });
@@ -389,8 +399,7 @@ function isCompleteGroups(groups) {
   return MUSCLE_GROUPS.every((muscle) => {
     const logged = (groups[muscle] || []).filter((set) => set.logged);
     return (
-      logged.length >= 5 &&
-      logged.length <= 6 &&
+      logged.length === 5 &&
       logged.every(
         (set) =>
           Number(set.weight) > 0 &&
@@ -518,7 +527,7 @@ function renderDayGrid() {
         </span>
       </span>
       <span class="day-meta">
-        <span>${stats.sets ? `${stats.sets}/12 sets` : day === currentDay ? "Log today" : "Open"}</span>
+        <span>${stats.sets ? `${stats.sets}/10 sets` : day === currentDay ? "Log today" : "Open"}</span>
         <span class="day-tick">${completed ? "✓" : partial ? "–" : "↗"}</span>
       </span>
     `;
@@ -822,11 +831,11 @@ function updateDaySummary() {
 async function saveDay() {
   const invalidGroup = MUSCLE_GROUPS.find((muscle) => {
     const logged = draftGroups[muscle].filter((set) => set.logged);
-    return logged.length < 5 || logged.length > 6;
+    return logged.length !== 5;
   });
 
   if (invalidGroup) {
-    showToast(`Log 5 or 6 ${invalidGroup.toLowerCase()} sets.`);
+    showToast(`Log all 5 ${invalidGroup.toLowerCase()} sets.`);
     return;
   }
 
@@ -1018,7 +1027,7 @@ function importData(file) {
       const imported = JSON.parse(reader.result);
       if (
         !imported ||
-        ![1, DATA_VERSION].includes(imported.version) ||
+        ![1, 2, DATA_VERSION].includes(imported.version) ||
         !imported.days ||
         !imported.checkins
       ) {
@@ -1111,3 +1120,8 @@ document.querySelector("#resetButton").addEventListener("click", resetChallenge)
 
 render();
 backupReadyPromise = initAutomaticBackup();
+if (didMigrateOnLoad) {
+  backupReadyPromise.then(() =>
+    syncAutomaticBackup({ allowSetup: false }),
+  );
+}
