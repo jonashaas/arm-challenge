@@ -229,6 +229,41 @@
           </div>
         </div>
       </form>
+
+      <div class="day-close-prompt" id="dayClosePrompt" hidden>
+        <section
+          class="day-close-prompt-card"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="dayClosePromptTitle"
+          aria-describedby="dayClosePromptCopy"
+        >
+          <p class="eyebrow">UNSAVED WORKOUT</p>
+          <h3 id="dayClosePromptTitle">Keep this progress?</h3>
+          <p id="dayClosePromptCopy">
+            Save the current snapshot, or discard changes made since the last save.
+          </p>
+          <div class="day-close-prompt-actions">
+            <button
+              class="secondary-button danger-text"
+              id="discardDayChangesButton"
+              type="button"
+            >
+              Discard
+            </button>
+            <button
+              class="primary-button"
+              id="saveCurrentDayButton"
+              type="button"
+            >
+              Save current
+            </button>
+          </div>
+          <button class="text-button day-close-keep" id="keepEditingDayButton" type="button">
+            Keep editing
+          </button>
+        </section>
+      </div>
     </dialog>
 
     <dialog class="sheet" id="checkinDialog">

@@ -78,6 +78,10 @@ const elements = {
   dayDialog: document.querySelector("#dayDialog"),
   dayDialogTitle: document.querySelector("#dayDialogTitle"),
   dayDialogEyebrow: document.querySelector("#dayDialogEyebrow"),
+  dayClosePrompt: document.querySelector("#dayClosePrompt"),
+  discardDayChangesButton: document.querySelector("#discardDayChangesButton"),
+  saveCurrentDayButton: document.querySelector("#saveCurrentDayButton"),
+  keepEditingDayButton: document.querySelector("#keepEditingDayButton"),
   tricepsSetList: document.querySelector("#tricepsSetList"),
   bicepsSetList: document.querySelector("#bicepsSetList"),
   loggedTricepsCount: document.querySelector("#loggedTricepsCount"),
@@ -722,6 +726,7 @@ function openDay(day) {
   elements.dayDialogTitle.textContent = `Day ${String(day).padStart(2, "0")}`;
   elements.dayDialogEyebrow.textContent =
     day === getCurrentDay() ? "CURRENT DAY" : "DAILY LOG";
+  hideDayClosePrompt({ restoreFocus: false });
   clearDayStatus();
   renderTrainingLocation();
   renderSetLists();
@@ -743,20 +748,54 @@ function hasUnsavedDayChanges() {
   );
 }
 
-async function requestCloseDayDialog() {
+function requestCloseDayDialog() {
+  if (dayClosePending) return;
+
+  if (!elements.dayClosePrompt.hidden) {
+    hideDayClosePrompt();
+    return;
+  }
+
+  if (hasUnsavedDayChanges()) {
+    showDayClosePrompt();
+    return;
+  }
+
+  elements.dayDialog.close();
+}
+
+function showDayClosePrompt() {
+  elements.dayClosePrompt.hidden = false;
+  elements.saveCurrentDayButton.focus();
+}
+
+function hideDayClosePrompt({ restoreFocus = true } = {}) {
+  elements.dayClosePrompt.hidden = true;
+  if (restoreFocus && elements.dayDialog.open) {
+    document.querySelector("#closeDayButton").focus();
+  }
+}
+
+async function saveCurrentDayAndClose() {
   if (dayClosePending) return;
   dayClosePending = true;
+  elements.discardDayChangesButton.disabled = true;
+  elements.saveCurrentDayButton.disabled = true;
+  hideDayClosePrompt({ restoreFocus: false });
 
   try {
-    if (hasUnsavedDayChanges()) {
-      await storeTrainingDay(isCompleteGroups(draftGroups));
-      return;
-    }
-
-    elements.dayDialog.close();
+    await storeTrainingDay(isCompleteGroups(draftGroups));
   } finally {
     dayClosePending = false;
+    elements.discardDayChangesButton.disabled = false;
+    elements.saveCurrentDayButton.disabled = false;
   }
+}
+
+function discardDayChangesAndClose() {
+  hideDayClosePrompt({ restoreFocus: false });
+  elements.dayDialog.close();
+  showToast(`Unsaved changes for day ${String(activeDay).padStart(2, "0")} discarded.`);
 }
 
 function showDayStatus(message, tone = "saved") {
@@ -1225,6 +1264,15 @@ document
   .addEventListener("click", savePartialDay);
 document.querySelector("#clearDayButton").addEventListener("click", clearDay);
 elements.cancelRestTimerButton.addEventListener("click", cancelRestTimer);
+elements.saveCurrentDayButton.addEventListener("click", saveCurrentDayAndClose);
+elements.discardDayChangesButton.addEventListener(
+  "click",
+  discardDayChangesAndClose,
+);
+elements.keepEditingDayButton.addEventListener("click", hideDayClosePrompt);
+elements.dayClosePrompt.addEventListener("click", (event) => {
+  if (event.target === elements.dayClosePrompt) hideDayClosePrompt();
+});
 elements.trainingLocationButtons.forEach((button) => {
   button.addEventListener("click", () => {
     clearDayStatus();
@@ -1264,6 +1312,7 @@ elements.dayDialog.addEventListener("click", (event) => {
 });
 
 elements.dayDialog.addEventListener("close", () => {
+  hideDayClosePrompt({ restoreFocus: false });
   dayDraftBaseline = null;
 });
 

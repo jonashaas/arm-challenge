@@ -1211,6 +1211,63 @@ footer {
   color: white;
 }
 
+.day-close-prompt[hidden] {
+  display: none;
+}
+
+.day-close-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  background: rgba(17, 17, 15, 0.72);
+  backdrop-filter: blur(5px);
+}
+
+.day-close-prompt-card {
+  width: min(430px, 100%);
+  padding: 28px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 12px 12px 0 var(--ink);
+}
+
+.day-close-prompt-card .eyebrow {
+  margin-bottom: 13px;
+}
+
+.day-close-prompt-card h3 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.day-close-prompt-card > p:not(.eyebrow) {
+  margin: 18px 0 24px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.day-close-prompt-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.day-close-prompt-actions button {
+  justify-content: center;
+}
+
+.day-close-keep {
+  width: 100%;
+  margin-top: 9px;
+  text-align: center;
+}
+
 .sheet-actions {
   display: flex;
   align-items: center;
@@ -1631,6 +1688,11 @@ em {
 
   .sheet-card {
     padding: 28px 18px 24px;
+  }
+
+  .day-close-prompt-card {
+    padding: 24px 18px;
+    box-shadow: 6px 6px 0 var(--ink);
   }
 
   .sheet-actions {
