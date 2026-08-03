@@ -7,6 +7,8 @@ const BACKUP_HANDLE_KEY = "primary";
 const MUSCLE_GROUPS = ["Triceps", "Biceps"];
 const CHECKIN_DAYS = [1, 7, 14, 21, 28];
 const CHECKIN_LABELS = ["Baseline", "Week 1", "Week 2", "Week 3", "Final"];
+const DAYS_PER_WEEK = 7;
+const CHALLENGE_WEEKS = 4;
 
 const createSet = () => ({
   logged: false,
@@ -106,6 +108,7 @@ const elements = {
   totalVolume: document.querySelector("#totalVolume"),
   totalSets: document.querySelector("#totalSets"),
   totalReps: document.querySelector("#totalReps"),
+  weeklyStatsGrid: document.querySelector("#weeklyStatsGrid"),
   armChange: document.querySelector("#armChange"),
   armChangeUnit: document.querySelector("#armChangeUnit"),
   currentDayStat: document.querySelector("#currentDayStat"),
@@ -649,6 +652,119 @@ function renderArmReading(label, value, delta) {
   `;
 }
 
+function getWeeklyStats() {
+  return Array.from({ length: CHALLENGE_WEEKS }, (_, index) => {
+    const startDay = index * DAYS_PER_WEEK + 1;
+    const endDay = startDay + DAYS_PER_WEEK - 1;
+    const records = [];
+
+    for (let day = startDay; day <= endDay; day += 1) {
+      const record = state.days[day];
+      if (isDayLogged(record)) records.push(record);
+    }
+
+    const totals = getStatsFromSets(records.flatMap(getLoggedSets));
+    return {
+      week: index + 1,
+      startDay,
+      endDay,
+      daysLogged: records.length,
+      ...totals,
+    };
+  });
+}
+
+function getWeeklyDelta(current, previous, key, unit = "") {
+  if (!current.daysLogged) {
+    return { label: "NO DATA", className: "neutral" };
+  }
+  if (!previous?.daysLogged) {
+    return { label: "FIRST WEEK", className: "neutral" };
+  }
+
+  const comparePace =
+    current.daysLogged < DAYS_PER_WEEK || previous.daysLogged < DAYS_PER_WEEK;
+  const currentValue = comparePace
+    ? current[key] / current.daysLogged
+    : current[key];
+  const previousValue = comparePace
+    ? previous[key] / previous.daysLogged
+    : previous[key];
+
+  if (!previousValue) {
+    return { label: "NO BASELINE", className: "neutral" };
+  }
+
+  const difference = currentValue - previousValue;
+  const percentage = (difference / previousValue) * 100;
+
+  if (difference === 0) {
+    return {
+      label: comparePace ? "0.0% PACE" : `0${unit} · 0.0%`,
+      className: "neutral",
+    };
+  }
+
+  const sign = difference > 0 ? "+" : "−";
+  const className = difference > 0 ? "up" : "down";
+  const percentLabel = `${sign}${Math.abs(percentage).toFixed(1)}%`;
+
+  if (comparePace) {
+    return { label: `${percentLabel} PACE`, className };
+  }
+
+  return {
+    label: `${sign}${formatNumber(Math.abs(difference))}${unit} · ${percentLabel}`,
+    className,
+  };
+}
+
+function renderWeeklyStats() {
+  const weeks = getWeeklyStats();
+  const activeWeek = Math.ceil(getCurrentDay() / DAYS_PER_WEEK);
+  const maxVolume = Math.max(...weeks.map((week) => week.volume), 1);
+  const maxReps = Math.max(...weeks.map((week) => week.reps), 1);
+
+  elements.weeklyStatsGrid.innerHTML = weeks
+    .map((week, index) => {
+      const previous = weeks[index - 1];
+      const volumeDelta = getWeeklyDelta(week, previous, "volume", " kg");
+      const repsDelta = getWeeklyDelta(week, previous, "reps");
+      const hasData = week.daysLogged > 0;
+      const volumeWidth = hasData ? (week.volume / maxVolume) * 100 : 0;
+      const repsWidth = hasData ? (week.reps / maxReps) * 100 : 0;
+
+      return `
+        <article
+          class="week-stat-card${week.week === activeWeek ? " active" : ""}${hasData ? "" : " empty"}"
+          aria-label="Week ${week.week}: ${week.daysLogged} of 7 days logged"
+        >
+          <header class="week-stat-head">
+            <span>WEEK <strong>${String(week.week).padStart(2, "0")}</strong></span>
+            <span>D${String(week.startDay).padStart(2, "0")}–D${String(week.endDay).padStart(2, "0")}</span>
+          </header>
+          <div class="week-stat-days">
+            <strong>${week.daysLogged}/7 DAYS</strong>
+            ${week.week === activeWeek ? "<span>CURRENT</span>" : ""}
+          </div>
+          <div class="week-stat-metric">
+            <span class="week-stat-label">VOLUME</span>
+            <strong>${hasData ? `${formatNumber(week.volume)} <small>kg</small>` : "—"}</strong>
+            <span class="week-stat-delta ${volumeDelta.className}">${volumeDelta.label}</span>
+            <span class="week-stat-meter volume" aria-hidden="true"><i style="width:${volumeWidth}%"></i></span>
+          </div>
+          <div class="week-stat-metric reps">
+            <span class="week-stat-label">REPS</span>
+            <strong>${hasData ? formatNumber(week.reps) : "—"}</strong>
+            <span class="week-stat-delta ${repsDelta.className}">${repsDelta.label}</span>
+            <span class="week-stat-meter reps" aria-hidden="true"><i style="width:${repsWidth}%"></i></span>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderStats() {
   const completed = getCompletedDays();
   const loggedSets = getChallengeDayEntries().flatMap(([, record]) =>
@@ -698,6 +814,8 @@ function renderStats() {
   } else {
     elements.armChangeUnit.textContent = "needs 2 check-ins";
   }
+
+  renderWeeklyStats();
 }
 
 function getArmChange(key) {
