@@ -800,6 +800,7 @@ function updateRestTimer() {
 function startRestTimer() {
   restTimerStartedAt = Date.now();
   restTimerDay = activeDay;
+  elements.restTimer.classList.remove("dismissed");
   elements.restTimer.classList.remove("inactive");
   elements.cancelRestTimerButton.disabled = false;
   updateRestTimer();
@@ -813,10 +814,16 @@ function resetRestTimer() {
   restTimerStartedAt = null;
   restTimerInterval = null;
   restTimerDay = null;
+  elements.restTimer.classList.remove("dismissed");
   elements.restTimer.classList.add("inactive");
   elements.cancelRestTimerButton.disabled = true;
   elements.restTimerValue.textContent = "00:00";
   elements.restTimerState.textContent = "Complete a set to start";
+}
+
+function cancelRestTimer() {
+  resetRestTimer();
+  elements.restTimer.classList.add("dismissed");
 }
 
 function renderSetLists() {
@@ -1186,7 +1193,7 @@ document
   .querySelector("#savePartialDayButton")
   .addEventListener("click", savePartialDay);
 document.querySelector("#clearDayButton").addEventListener("click", clearDay);
-elements.cancelRestTimerButton.addEventListener("click", resetRestTimer);
+elements.cancelRestTimerButton.addEventListener("click", cancelRestTimer);
 elements.trainingLocationButtons.forEach((button) => {
   button.addEventListener("click", () => {
     draftLocation = button.dataset.trainingLocation;
