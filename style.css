@@ -399,18 +399,45 @@ h2 {
 }
 
 .progress-track {
+  position: relative;
   height: 10px;
   overflow: hidden;
   border: 1px solid var(--ink);
   background: var(--paper-strong);
 }
 
-.progress-track span {
+.progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
   display: block;
   width: 0;
-  height: 100%;
   background: var(--acid);
   transition: width 500ms ease;
+}
+
+.progress-sections {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  pointer-events: none;
+}
+
+.progress-sections i + i {
+  border-left: 1px solid var(--ink);
+}
+
+.progress-week-labels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  color: var(--muted);
+  font: 500 8px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+.progress-week-labels span {
+  padding-top: 6px;
+  text-align: center;
 }
 
 .day-grid {
