@@ -726,6 +726,13 @@ h2 {
   font: 400 8px/1 var(--font-mono);
 }
 
+.arm-week-deltas {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
 .arm-week-delta {
   min-width: 34px;
   padding: 5px 6px;
@@ -741,6 +748,16 @@ h2 {
 }
 
 .arm-week-delta.down {
+  background: var(--red);
+  color: white;
+}
+
+.arm-week-delta.percent {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.arm-week-delta.percent.down {
   background: var(--red);
   color: white;
 }
@@ -1468,8 +1485,13 @@ em {
   }
 
   .arm-reading {
-    grid-template-columns: 30px minmax(0, 1fr) auto;
+    grid-template-columns: 30px minmax(0, 1fr);
     gap: 5px;
+  }
+
+  .arm-week-deltas {
+    grid-column: 2;
+    justify-content: flex-start;
   }
 
   .arm-reading strong {

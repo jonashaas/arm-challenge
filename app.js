@@ -592,13 +592,23 @@ function getMeasurement(value) {
 
 function getMeasurementDelta(current, previous) {
   if (current === null || previous === null) {
-    return { label: "", className: "" };
+    return { label: "", percentLabel: "", className: "" };
   }
 
-  const difference = Math.round((current - previous) * 10) / 10;
-  if (difference === 0) return { label: "", className: "" };
+  const rawDifference = current - previous;
+  const difference = Math.round(rawDifference * 10) / 10;
+  if (difference === 0) {
+    return { label: "", percentLabel: "", className: "" };
+  }
+
+  const percentChange = previous === 0 ? null : (rawDifference / previous) * 100;
+  const sign = difference > 0 ? "+" : "−";
   return {
-    label: `${difference > 0 ? "+" : "−"}${Math.abs(difference).toFixed(1)}`,
+    label: `${sign}${Math.abs(difference).toFixed(1)}`,
+    percentLabel:
+      percentChange === null
+        ? ""
+        : `${sign}${Math.abs(percentChange).toFixed(1)}%`,
     className: difference > 0 ? "up" : "down",
   };
 }
@@ -608,7 +618,12 @@ function renderArmReading(label, value, delta) {
     <span class="arm-reading">
       <small>${label}</small>
       <strong>${value === null ? "—" : `${value.toFixed(1)} <em>cm</em>`}</strong>
-      ${delta.label ? `<span class="arm-week-delta ${delta.className}">${delta.label}</span>` : ""}
+      ${delta.label ? `
+        <span class="arm-week-deltas">
+          <span class="arm-week-delta ${delta.className}">${delta.label}</span>
+          ${delta.percentLabel ? `<span class="arm-week-delta percent ${delta.className}">${delta.percentLabel}</span>` : ""}
+        </span>
+      ` : ""}
     </span>
   `;
 }
