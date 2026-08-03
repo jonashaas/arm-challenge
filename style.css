@@ -503,6 +503,12 @@ h2 {
   color: white;
 }
 
+.day-badge.location {
+  background: transparent;
+  color: currentColor;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
 .day-card.partial {
   background: #e7e3d8;
 }
@@ -858,6 +864,42 @@ footer {
 
 .day-summary strong {
   color: var(--ink);
+}
+
+.training-location-row {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: var(--muted);
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.09em;
+}
+
+.training-location-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--ink);
+}
+
+.training-location-toggle button {
+  min-width: 76px;
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--muted);
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.training-location-toggle button + button {
+  border-left: 1px solid var(--ink);
+}
+
+.training-location-toggle button.active {
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .rest-timer {

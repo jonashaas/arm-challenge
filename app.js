@@ -60,6 +60,7 @@ let state = loadState();
 let activeDay = 1;
 let activeCheckinDay = 1;
 let draftGroups = createGroups();
+let draftLocation = "gym";
 let draftPhoto = null;
 let toastTimer;
 let backupHandle = null;
@@ -84,6 +85,9 @@ const elements = {
   restTimer: document.querySelector("#restTimer"),
   restTimerValue: document.querySelector("#restTimerValue"),
   restTimerState: document.querySelector("#restTimerState"),
+  trainingLocationButtons: Array.from(
+    document.querySelectorAll("[data-training-location]"),
+  ),
   tricepsBlockTotal: document.querySelector("#tricepsBlockTotal"),
   bicepsBlockTotal: document.querySelector("#bicepsBlockTotal"),
   completedDays: document.querySelector("#completedDays"),
@@ -171,6 +175,9 @@ function migrateState(saved) {
       groups,
       complete,
       partial: !complete && hasLoggedSets,
+      location: ["gym", "home"].includes(record.location)
+        ? record.location
+        : null,
       updatedAt: record.updatedAt || null,
     };
   });
@@ -482,6 +489,9 @@ function renderDayGrid() {
     const record = state.days[day];
     const completed = Boolean(record?.complete);
     const partial = Boolean(record?.partial);
+    const location = ["gym", "home"].includes(record?.location)
+      ? record.location
+      : null;
     const stats = getDayStats(record);
     const previousRecord = day > 1 ? state.days[day - 1] : null;
     const previousStats = isDayLogged(previousRecord) ? getDayStats(previousRecord) : null;
@@ -489,6 +499,9 @@ function renderDayGrid() {
     const repsDelta = getDelta(stats.reps, previousStats?.reps, "");
     const badges = [
       partial ? '<span class="day-badge partial">PARTIAL</span>' : "",
+      isDayLogged(record) && location
+        ? `<span class="day-badge location">${location.toUpperCase()}</span>`
+        : "",
       day === highestDay ? '<span class="day-badge">PR VOL</span>' : "",
       day === lowestDay ? '<span class="day-badge low">LOW VOL</span>' : "",
     ].join("");
@@ -506,7 +519,7 @@ function renderDayGrid() {
       .join(" ");
     button.setAttribute(
       "aria-label",
-      `Day ${day}, ${completed ? "complete" : partial ? "partial" : day === currentDay ? "current" : "not complete"}`,
+      `Day ${day}, ${completed ? "complete" : partial ? "partial" : day === currentDay ? "current" : "not complete"}${location ? `, ${location}` : ""}`,
     );
 
     button.innerHTML = `
@@ -700,11 +713,38 @@ function openDay(day) {
   activeDay = day;
   const saved = state.days[day]?.groups;
   draftGroups = saved ? structuredClone(saved) : createPrefilledGroups(day);
+  draftLocation = getTrainingLocation(day);
   elements.dayDialogTitle.textContent = `Day ${String(day).padStart(2, "0")}`;
   elements.dayDialogEyebrow.textContent =
     day === getCurrentDay() ? "CURRENT DAY" : "DAILY LOG";
+  renderTrainingLocation();
   renderSetLists();
   elements.dayDialog.showModal();
+}
+
+function getTrainingLocation(day) {
+  const savedLocation = state.days[day]?.location;
+  if (["gym", "home"].includes(savedLocation)) return savedLocation;
+
+  for (let previousDay = day - 1; previousDay >= 1; previousDay -= 1) {
+    const previousRecord = state.days[previousDay];
+    if (
+      isDayLogged(previousRecord) &&
+      ["gym", "home"].includes(previousRecord.location)
+    ) {
+      return previousRecord.location;
+    }
+  }
+
+  return "gym";
+}
+
+function renderTrainingLocation() {
+  elements.trainingLocationButtons.forEach((button) => {
+    const active = button.dataset.trainingLocation === draftLocation;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
 }
 
 function formatRestTime(elapsedSeconds) {
@@ -889,6 +929,7 @@ async function storeTrainingDay(complete) {
     groups: structuredClone(draftGroups),
     complete,
     partial: !complete,
+    location: draftLocation,
     updatedAt: new Date().toISOString(),
   };
 
@@ -905,6 +946,8 @@ async function clearDay() {
   if (!state.days[activeDay]) {
     resetRestTimer();
     draftGroups = createPrefilledGroups(activeDay);
+    draftLocation = getTrainingLocation(activeDay);
+    renderTrainingLocation();
     renderSetLists();
     return;
   }
@@ -914,6 +957,8 @@ async function clearDay() {
   await persist();
   resetRestTimer();
   draftGroups = createPrefilledGroups(activeDay);
+  draftLocation = getTrainingLocation(activeDay);
+  renderTrainingLocation();
   renderSetLists();
   render();
   showToast(`Day ${String(activeDay).padStart(2, "0")} cleared.`);
@@ -1105,6 +1150,12 @@ document
   .querySelector("#savePartialDayButton")
   .addEventListener("click", savePartialDay);
 document.querySelector("#clearDayButton").addEventListener("click", clearDay);
+elements.trainingLocationButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    draftLocation = button.dataset.trainingLocation;
+    renderTrainingLocation();
+  });
+});
 document.querySelector("#saveCheckinButton").addEventListener("click", saveCheckin);
 document.querySelector("#clearCheckinButton").addEventListener("click", clearCheckin);
 elements.photoInput.addEventListener("change", (event) => handlePhoto(event.target.files[0]));
