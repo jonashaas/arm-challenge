@@ -937,7 +937,7 @@ footer {
   margin-bottom: 22px;
   padding: 10px 16px;
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto auto 1fr 32px;
   align-items: center;
   gap: 14px;
   border: 1px solid var(--ink);
@@ -966,6 +966,27 @@ footer {
   color: #aaa9a2;
 }
 
+.rest-timer-cancel {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #55544f;
+  border-radius: 50%;
+  color: var(--paper);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.rest-timer-cancel:hover:not(:disabled) {
+  border-color: var(--paper);
+}
+
+.rest-timer-cancel:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
 .rest-timer.inactive {
   border-color: var(--line);
   background: var(--paper-strong);
@@ -975,6 +996,11 @@ footer {
 
 .rest-timer.inactive strong,
 .rest-timer.inactive .rest-timer-state {
+  color: var(--muted);
+}
+
+.rest-timer.inactive .rest-timer-cancel {
+  border-color: var(--line);
   color: var(--muted);
 }
 
@@ -1604,12 +1630,18 @@ em {
   }
 
   .rest-timer {
-    grid-template-columns: auto auto;
+    grid-template-columns: auto 1fr 32px;
   }
 
   .rest-timer-state {
     grid-column: 1 / -1;
+    grid-row: 2;
     justify-self: start;
+  }
+
+  .rest-timer-cancel {
+    grid-column: 3;
+    grid-row: 1;
   }
 
   .set-row {
