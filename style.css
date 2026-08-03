@@ -971,15 +971,17 @@ footer {
   height: 32px;
   display: grid;
   place-items: center;
-  border: 1px solid #55544f;
+  border: 1px solid var(--paper);
   border-radius: 50%;
-  color: var(--paper);
+  background: var(--acid);
+  color: var(--ink);
   font-size: 20px;
+  font-weight: 700;
   line-height: 1;
 }
 
 .rest-timer-cancel:hover:not(:disabled) {
-  border-color: var(--paper);
+  background: var(--paper);
 }
 
 .rest-timer-cancel:disabled {
@@ -1191,6 +1193,22 @@ footer {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.5;
+}
+
+.day-save-status {
+  margin: -12px 0 24px;
+  padding: 12px 14px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font: 600 9px/1.4 var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+.day-save-status[data-tone="warning"] {
+  border-color: var(--red);
+  background: var(--red);
+  color: white;
 }
 
 .sheet-actions {

@@ -62,6 +62,7 @@ let activeCheckinDay = 1;
 let draftGroups = createGroups();
 let draftLocation = "gym";
 let dayDraftBaseline = null;
+let dayClosePending = false;
 let draftPhoto = null;
 let toastTimer;
 let backupHandle = null;
@@ -83,6 +84,7 @@ const elements = {
   loggedBicepsCount: document.querySelector("#loggedBicepsCount"),
   loggedRepsCount: document.querySelector("#loggedRepsCount"),
   loggedVolumeCount: document.querySelector("#loggedVolumeCount"),
+  daySaveStatus: document.querySelector("#daySaveStatus"),
   restTimer: document.querySelector("#restTimer"),
   restTimerValue: document.querySelector("#restTimerValue"),
   restTimerState: document.querySelector("#restTimerState"),
@@ -720,6 +722,7 @@ function openDay(day) {
   elements.dayDialogTitle.textContent = `Day ${String(day).padStart(2, "0")}`;
   elements.dayDialogEyebrow.textContent =
     day === getCurrentDay() ? "CURRENT DAY" : "DAILY LOG";
+  clearDayStatus();
   renderTrainingLocation();
   renderSetLists();
   elements.dayDialog.showModal();
@@ -740,17 +743,32 @@ function hasUnsavedDayChanges() {
   );
 }
 
-function requestCloseDayDialog() {
-  if (
-    hasUnsavedDayChanges() &&
-    !window.confirm(
-      `Discard unsaved changes for day ${activeDay}? Your current workout entries will be lost.`,
-    )
-  ) {
-    return;
-  }
+async function requestCloseDayDialog() {
+  if (dayClosePending) return;
+  dayClosePending = true;
 
-  elements.dayDialog.close();
+  try {
+    if (hasUnsavedDayChanges()) {
+      await storeTrainingDay(isCompleteGroups(draftGroups));
+      return;
+    }
+
+    elements.dayDialog.close();
+  } finally {
+    dayClosePending = false;
+  }
+}
+
+function showDayStatus(message, tone = "saved") {
+  elements.daySaveStatus.textContent = message;
+  elements.daySaveStatus.dataset.tone = tone;
+  elements.daySaveStatus.hidden = false;
+}
+
+function clearDayStatus() {
+  elements.daySaveStatus.hidden = true;
+  elements.daySaveStatus.textContent = "";
+  delete elements.daySaveStatus.dataset.tone;
 }
 
 function getTrainingLocation(day) {
@@ -866,6 +884,7 @@ function renderGroupList(muscle, container) {
     const enableButton = row.querySelector(".set-enable");
 
     weightInput.addEventListener("input", (event) => {
+      clearDayStatus();
       const wasLogged = set.logged;
       set.weight = event.target.value;
       set.logged = Number(set.weight) > 0;
@@ -882,16 +901,19 @@ function renderGroupList(muscle, container) {
     });
 
     row.querySelector(".rep-minus").addEventListener("click", () => {
+      clearDayStatus();
       set.reps = Math.max(0, set.reps - 1);
       renderSetLists();
     });
 
     row.querySelector(".rep-plus").addEventListener("click", () => {
+      clearDayStatus();
       set.reps = Math.min(30, set.reps + 1);
       renderSetLists();
     });
 
     enableButton.addEventListener("click", () => {
+      clearDayStatus();
       set.logged = !set.logged;
       if (set.logged) {
         startRestTimer();
@@ -930,7 +952,10 @@ async function saveDay() {
   });
 
   if (invalidGroup) {
-    showToast(`Log all 5 ${invalidGroup.toLowerCase()} sets.`);
+    showDayStatus(
+      `Not complete · log all 5 ${invalidGroup.toLowerCase()} sets.`,
+      "warning",
+    );
     return;
   }
 
@@ -938,7 +963,7 @@ async function saveDay() {
     (set) => Number(set.weight) <= 0,
   );
   if (missingWeight) {
-    showToast("Add kg to every logged set.");
+    showDayStatus("Not complete · add kg to every logged set.", "warning");
     return;
   }
 
@@ -946,21 +971,15 @@ async function saveDay() {
 }
 
 async function savePartialDay() {
-  const logged = getLoggedSetsFromGroups(draftGroups);
-  if (!logged.length) {
-    showToast("Check at least one performed set.");
+  if (!hasUnsavedDayChanges()) {
+    showDayStatus("No new changes to save.", "warning");
     return;
   }
 
-  if (logged.some((set) => Number(set.weight) <= 0)) {
-    showToast("Add kg to every checked set.");
-    return;
-  }
-
-  await storeTrainingDay(isCompleteGroups(draftGroups));
+  await storeTrainingDay(isCompleteGroups(draftGroups), { closeDialog: false });
 }
 
-async function storeTrainingDay(complete) {
+async function storeTrainingDay(complete, { closeDialog = true } = {}) {
   if (!state.startedAt) {
     state.startedAt = new Date().toISOString();
   }
@@ -973,14 +992,26 @@ async function storeTrainingDay(complete) {
     updatedAt: new Date().toISOString(),
   };
 
-  if (!(await persist())) return;
+  if (!(await persist())) {
+    showDayStatus(
+      "Could not save this snapshot. Keep this workout open.",
+      "warning",
+    );
+    return false;
+  }
   dayDraftBaseline = getDayDraftSnapshot();
-  elements.dayDialog.close();
   render();
   const status = complete ? "saved" : "saved as partial";
-  showToast(
-    `Day ${String(activeDay).padStart(2, "0")} ${status}${lastBackupSynced ? " + backup updated." : " locally."}`,
-  );
+  const message = `Day ${String(activeDay).padStart(2, "0")} ${status}${lastBackupSynced ? " + backup updated." : " locally."}`;
+
+  if (closeDialog) {
+    elements.dayDialog.close();
+    showToast(message);
+  } else {
+    showDayStatus(`${message} Keep going.`);
+  }
+
+  return true;
 }
 
 async function clearDay() {
@@ -1196,6 +1227,7 @@ document.querySelector("#clearDayButton").addEventListener("click", clearDay);
 elements.cancelRestTimerButton.addEventListener("click", cancelRestTimer);
 elements.trainingLocationButtons.forEach((button) => {
   button.addEventListener("click", () => {
+    clearDayStatus();
     draftLocation = button.dataset.trainingLocation;
     renderTrainingLocation();
   });
