@@ -61,6 +61,7 @@ let activeDay = 1;
 let activeCheckinDay = 1;
 let draftGroups = createGroups();
 let draftLocation = "gym";
+let dayDraftBaseline = null;
 let draftPhoto = null;
 let toastTimer;
 let backupHandle = null;
@@ -714,12 +715,41 @@ function openDay(day) {
   const saved = state.days[day]?.groups;
   draftGroups = saved ? structuredClone(saved) : createPrefilledGroups(day);
   draftLocation = getTrainingLocation(day);
+  dayDraftBaseline = getDayDraftSnapshot();
   elements.dayDialogTitle.textContent = `Day ${String(day).padStart(2, "0")}`;
   elements.dayDialogEyebrow.textContent =
     day === getCurrentDay() ? "CURRENT DAY" : "DAILY LOG";
   renderTrainingLocation();
   renderSetLists();
   elements.dayDialog.showModal();
+}
+
+function getDayDraftSnapshot() {
+  return JSON.stringify({
+    groups: draftGroups,
+    location: draftLocation,
+  });
+}
+
+function hasUnsavedDayChanges() {
+  return (
+    elements.dayDialog.open &&
+    dayDraftBaseline !== null &&
+    getDayDraftSnapshot() !== dayDraftBaseline
+  );
+}
+
+function requestCloseDayDialog() {
+  if (
+    hasUnsavedDayChanges() &&
+    !window.confirm(
+      `Discard unsaved changes for day ${activeDay}? Your current workout entries will be lost.`,
+    )
+  ) {
+    return;
+  }
+
+  elements.dayDialog.close();
 }
 
 function getTrainingLocation(day) {
@@ -934,6 +964,7 @@ async function storeTrainingDay(complete) {
   };
 
   if (!(await persist())) return;
+  dayDraftBaseline = getDayDraftSnapshot();
   elements.dayDialog.close();
   render();
   const status = complete ? "saved" : "saved as partial";
@@ -947,6 +978,7 @@ async function clearDay() {
     resetRestTimer();
     draftGroups = createPrefilledGroups(activeDay);
     draftLocation = getTrainingLocation(activeDay);
+    dayDraftBaseline = getDayDraftSnapshot();
     renderTrainingLocation();
     renderSetLists();
     return;
@@ -958,6 +990,7 @@ async function clearDay() {
   resetRestTimer();
   draftGroups = createPrefilledGroups(activeDay);
   draftLocation = getTrainingLocation(activeDay);
+  dayDraftBaseline = getDayDraftSnapshot();
   renderTrainingLocation();
   renderSetLists();
   render();
@@ -1139,9 +1172,9 @@ function showToast(message) {
 }
 
 elements.todayButton.addEventListener("click", () => openDay(getCurrentDay()));
-document.querySelector("#closeDayButton").addEventListener("click", () => {
-  elements.dayDialog.close();
-});
+document
+  .querySelector("#closeDayButton")
+  .addEventListener("click", requestCloseDayDialog);
 document.querySelector("#closeCheckinButton").addEventListener("click", () => {
   elements.checkinDialog.close();
 });
@@ -1178,7 +1211,26 @@ document.querySelector("#closeSettingsButton").addEventListener("click", () => {
 });
 document.querySelector("#resetButton").addEventListener("click", resetChallenge);
 
-[elements.dayDialog, elements.checkinDialog, elements.settingsDialog].forEach((dialog) => {
+elements.dayDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  requestCloseDayDialog();
+});
+
+elements.dayDialog.addEventListener("click", (event) => {
+  if (event.target === elements.dayDialog) requestCloseDayDialog();
+});
+
+elements.dayDialog.addEventListener("close", () => {
+  dayDraftBaseline = null;
+});
+
+window.addEventListener("beforeunload", (event) => {
+  if (!hasUnsavedDayChanges()) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
+
+[elements.checkinDialog, elements.settingsDialog].forEach((dialog) => {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) dialog.close();
   });
