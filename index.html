@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Bigger Arm Challenge — a local-first 28-day biceps and triceps tracker."
+      content="Bigger Arm Challenge — a 28-day biceps and triceps tracker."
     />
     <title>Bigger Arm Challenge</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" sizes="any" />
@@ -27,7 +27,7 @@
         <input id="importInput" type="file" accept="application/json" hidden />
         <button class="sync-button" id="syncButton" type="button" data-state="local">
           <i aria-hidden="true"></i>
-          <span id="syncButtonLabel">Local</span>
+          <span id="syncButtonLabel">Sync</span>
         </button>
         <button class="icon-button" id="settingsButton" type="button" aria-label="Open settings">
           •••
@@ -160,7 +160,7 @@
 
     <footer>
       <span>BIGGER ARM CHALLENGE</span>
-      <span>Local cache. Private cloud sync when signed in.</span>
+      <span>Your progress stays saved.</span>
     </footer>
 
     <dialog class="sheet" id="dayDialog">
@@ -330,7 +330,7 @@
           <img id="photoPreview" alt="Weekly progress preview" hidden />
           <span class="photo-prompt" id="photoPrompt">
             <b>Add progress photo</b>
-            <small>JPG or PNG · compressed locally</small>
+            <small>JPG or PNG · resized before saving</small>
           </span>
         </label>
 
@@ -365,13 +365,11 @@
             <small id="cloudAccount">Not signed in</small>
           </div>
           <p>
-            One account, one challenge. Every saved change syncs through Supabase;
-            this browser keeps an offline cache. Moving from the old file-based app?
-            Import its JSON once below.
+            Keep your progress up to date on all your devices.
           </p>
           <div class="cloud-status" id="cloudStatus" data-state="local">
             <i aria-hidden="true"></i>
-            <span id="cloudStatusText">Local only · sign in to sync devices</span>
+            <span id="cloudStatusText">Not syncing · sign in to sync devices</span>
           </div>
           <button class="primary-button full-button" id="cloudAuthButton" type="button">
             Sign in to sync
@@ -385,8 +383,8 @@
             <small id="shareStatusText">Sign in first</small>
           </div>
           <p>
-            Share totals, logged days, weekly output, and arm measurements.
-            Photos, notes, and account details stay private.
+            Create a read-only link so others can see your progress.
+            Photos and notes stay private.
           </p>
           <label class="share-link-field" id="shareLinkField" hidden>
             <span>PUBLIC LINK</span>
@@ -402,25 +400,24 @@
           </div>
         </section>
 
-        <div class="settings-divider"><span>OPTIONAL FILE BACKUP</span></div>
+        <div class="settings-divider"><span>BACKUP</span></div>
         <div class="settings-copy">
           <p>
-            Choose one JSON file once. Every saved change then rewrites that backup
-            automatically.
+            Keep an extra copy in a file. It updates automatically whenever you save.
           </p>
         </div>
         <div class="backup-status" id="backupStatus" data-state="idle">
           <i aria-hidden="true"></i>
-          <span>Checking automatic backup…</span>
+          <span>Checking backup…</span>
         </div>
         <button class="primary-button full-button" id="connectBackupButton" type="button">
-          Connect automatic backup
+          Choose backup file
         </button>
         <label class="secondary-button full-button settings-import-button" for="importInput">
-          Import existing data
+          Import data
         </label>
         <button class="secondary-button full-button" id="settingsExportButton" type="button">
-          Download separate snapshot
+          Download backup
         </button>
         <button class="secondary-button full-button reset-button" id="resetButton" type="button">
           Reset entire experiment
@@ -438,7 +435,7 @@
           <button class="close-button" id="closeAuthButton" type="button" aria-label="Close">×</button>
         </div>
         <p class="auth-copy">
-          Enter your email. Supabase sends a one-time sign-in link. No password.
+          We’ll email you a sign-in link. No password needed.
         </p>
         <label class="auth-email-field">
           <span>Email</span>

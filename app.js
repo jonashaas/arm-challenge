@@ -81,7 +81,6 @@ let draftPhoto = null;
 let toastTimer;
 let backupHandle = null;
 let backupReadyPromise;
-let lastBackupSynced = false;
 let supabaseClient = null;
 let cloudUser = null;
 let cloudReadyPromise;
@@ -345,7 +344,7 @@ async function handleSharePrimary() {
   renderShareControls();
 
   if (!saved || !lastCloudSynced) {
-    showToast("Link saved locally. Cloud retry needed before it is live.");
+    showToast("Link isn’t live yet. We’ll retry when you’re online.");
     return;
   }
 
@@ -491,19 +490,18 @@ function hasMeaningfulState(candidate = state) {
 }
 
 async function persist({ allowBackupSetup = true } = {}) {
-  lastBackupSynced = false;
   lastCloudSynced = false;
   state.version = DATA_VERSION;
   state.updatedAt = new Date().toISOString();
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
-    showToast("Storage full. Export a backup and use smaller photos.");
+    showToast("Not enough space to save. Download a backup and use smaller photos.");
     return false;
   }
 
   lastCloudSynced = await queueCloudSync();
-  lastBackupSynced = await syncAutomaticBackup({
+  await syncAutomaticBackup({
     allowSetup: allowBackupSetup && !cloudUser,
   });
   return true;
@@ -520,7 +518,7 @@ function setCloudStatus(status, message) {
         ? "Syncing"
         : status === "error"
           ? "Offline"
-          : "Local";
+          : "Sync";
   elements.cloudAccount.textContent = cloudUser?.email || "Not signed in";
   elements.cloudAuthButton.textContent = cloudUser ? "Sign out" : "Sign in to sync";
   renderShareControls();
@@ -535,7 +533,7 @@ function setAuthMessage(message, tone = "info") {
 function openAuthDialog() {
   setAuthMessage(
     location.protocol === "file:"
-      ? "This link opens the live app. Export this file-based data first, then import it there once."
+      ? "Sign in on the live website. Download your backup here, then import it there."
       : "",
   );
   elements.authDialog.showModal();
@@ -544,7 +542,7 @@ function openAuthDialog() {
 
 async function handleCloudAuthButton() {
   if (!supabaseClient) {
-    showToast("Cloud sync is unavailable. Reload and try again.");
+    showToast("Sync isn’t ready. Reload and try again.");
     return;
   }
 
@@ -562,8 +560,8 @@ async function handleCloudAuthButton() {
   }
 
   cloudUser = null;
-  setCloudStatus("local", "Signed out · data remains cached on this device");
-  showToast("Signed out. Local cache kept.");
+  setCloudStatus("local", "Signed out");
+  showToast("Signed out.");
 }
 
 async function sendMagicLink(event) {
@@ -594,7 +592,7 @@ async function sendMagicLink(event) {
 
   setAuthMessage(
     location.protocol === "file:"
-      ? "Link sent. Open it, then import this file-based data into the live app once."
+      ? "Link sent. Open it, then import your backup on the live website."
       : "Link sent. Open it on this device to finish signing in.",
   );
   showToast("Sign-in link sent.");
@@ -602,7 +600,7 @@ async function sendMagicLink(event) {
 
 async function initCloudSync() {
   if (!window.supabase?.createClient) {
-    setCloudStatus("error", "Cloud client failed to load · local cache still works");
+    setCloudStatus("error", "Can’t sync right now · your changes are saved");
     elements.cloudAuthButton.disabled = true;
     return;
   }
@@ -628,7 +626,7 @@ async function initCloudSync() {
     window.setTimeout(() => {
       if (event === "SIGNED_OUT" || !session) {
         cloudUser = null;
-        setCloudStatus("local", "Local only · sign in to sync devices");
+        setCloudStatus("local", "Not syncing · sign in to sync devices");
         return;
       }
 
@@ -641,14 +639,14 @@ async function initCloudSync() {
   const { data, error } = await supabaseClient.auth.getSession();
   if (error) {
     console.warn("Could not restore Supabase session.", error);
-    setCloudStatus("error", "Cloud session failed · local cache is safe");
+    setCloudStatus("error", "Can’t sync right now · your changes are saved");
     return;
   }
 
   if (data.session) {
     await scheduleCloudSession(data.session);
   } else {
-    setCloudStatus("local", "Local only · sign in to sync devices");
+    setCloudStatus("local", "Not syncing · sign in to sync devices");
   }
 }
 
@@ -662,13 +660,13 @@ function scheduleCloudSession(session) {
 async function activateCloudSession(session) {
   if (!session?.user) return;
   cloudUser = session.user;
-  setCloudStatus("syncing", "Checking cloud state…");
+  setCloudStatus("syncing", "Checking for updates…");
 
   try {
     await reconcileCloudState();
   } catch (error) {
     console.warn("Could not reconcile Supabase state.", error);
-    setCloudStatus("error", "Cloud unavailable · changes stay cached locally");
+    setCloudStatus("error", "Can’t sync right now · your changes are saved");
   }
 }
 
@@ -687,7 +685,7 @@ async function reconcileCloudState() {
   if (!cloudRow) {
     const migratedExistingData = hasMeaningfulState(state);
     await writeCloudState();
-    if (migratedExistingData) showToast("Existing data synced to your account.");
+    if (migratedExistingData) showToast("Your progress is up to date.");
     return true;
   }
 
@@ -705,7 +703,7 @@ async function reconcileCloudState() {
   writeLocalCache();
   render();
   await syncPublicShare();
-  setCloudStatus("synced", "Cloud current · offline cache ready");
+  setCloudStatus("synced", "Up to date");
   return true;
 }
 
@@ -720,7 +718,7 @@ function queueCloudSync() {
         return true;
       } catch (error) {
         console.warn("Could not sync challenge to Supabase.", error);
-        setCloudStatus("error", "Cloud retry needed · local cache is current");
+        setCloudStatus("error", "Can’t sync right now · retrying");
         return false;
       }
     });
@@ -732,7 +730,7 @@ async function writeCloudState() {
   const user = cloudUser;
   if (!user || !supabaseClient) return false;
 
-  setCloudStatus("syncing", "Saving to cloud…");
+  setCloudStatus("syncing", "Saving…");
   const cloudState = await prepareCloudState(user.id);
   const { error } = await supabaseClient.from("challenge_states").upsert(
     {
@@ -745,7 +743,7 @@ async function writeCloudState() {
 
   if (error) throw error;
   await syncPublicShare();
-  setCloudStatus("synced", "Cloud current · offline cache ready");
+  setCloudStatus("synced", "Up to date");
   return true;
 }
 
@@ -860,17 +858,15 @@ async function removeCloudPhoto(photoPath) {
 }
 
 function getSaveDestinationSuffix() {
-  if (lastCloudSynced) return " + cloud synced.";
-  if (lastBackupSynced) return " + backup updated.";
-  if (cloudUser) return " locally; cloud retry queued.";
-  return " locally.";
+  if (cloudUser && !lastCloudSynced) return ". Sync will retry.";
+  return ".";
 }
 
 function setBackupStatus(status, message) {
   elements.backupStatus.dataset.state = status;
   elements.backupStatus.querySelector("span").textContent = message;
   elements.connectBackupButton.textContent =
-    status === "connected" ? "Change backup file" : "Connect automatic backup";
+    status === "connected" ? "Change backup file" : "Choose backup file";
 }
 
 function openBackupDatabase() {
@@ -917,7 +913,7 @@ async function storeBackupHandle(handle) {
 
 async function initAutomaticBackup() {
   if (!("showSaveFilePicker" in window) || !("indexedDB" in window)) {
-    setBackupStatus("attention", "Automatic file backup is unavailable in this browser.");
+    setBackupStatus("attention", "File backups aren’t supported in this browser.");
     elements.connectBackupButton.disabled = true;
     return;
   }
@@ -925,7 +921,7 @@ async function initAutomaticBackup() {
   try {
     backupHandle = await getStoredBackupHandle();
     if (!backupHandle) {
-      setBackupStatus("idle", "Not connected · first save will ask for a file");
+      setBackupStatus("idle", "No backup file selected");
       return;
     }
 
@@ -933,12 +929,12 @@ async function initAutomaticBackup() {
     setBackupStatus(
       permission === "granted" ? "connected" : "attention",
       permission === "granted"
-        ? `Automatic backup connected · ${backupHandle.name}`
-        : `Permission needed · ${backupHandle.name}`,
+        ? `Backing up to ${backupHandle.name}`
+        : `Allow access to ${backupHandle.name}`,
     );
   } catch (error) {
     backupHandle = null;
-    setBackupStatus("idle", "Not connected · first save will ask for a file");
+    setBackupStatus("idle", "No backup file selected");
   }
 }
 
@@ -963,14 +959,14 @@ async function chooseBackupFile() {
       console.warn("Backup file connection will last for this tab only.", error);
     }
     await writeBackupFile();
-    setBackupStatus("connected", `Automatic backup connected · ${handle.name}`);
+    setBackupStatus("connected", `Backing up to ${handle.name}`);
     return true;
   } catch (error) {
     if (error?.name !== "AbortError") {
       console.warn("Could not connect backup file.", error);
-      setBackupStatus("attention", "Backup connection failed · try again");
+      setBackupStatus("attention", "Couldn’t open that file · try again");
     } else {
-      setBackupStatus("idle", "Not connected · data is still saved in this browser");
+      setBackupStatus("idle", "No backup file selected");
     }
     return false;
   }
@@ -996,16 +992,16 @@ async function syncAutomaticBackup({ allowSetup = true } = {}) {
       permission = await backupHandle.requestPermission({ mode: "readwrite" });
     }
     if (permission !== "granted") {
-      setBackupStatus("attention", `Permission needed · ${backupHandle.name}`);
+      setBackupStatus("attention", `Allow access to ${backupHandle.name}`);
       return false;
     }
 
     await writeBackupFile();
-    setBackupStatus("connected", `Automatic backup current · ${backupHandle.name}`);
+    setBackupStatus("connected", `${backupHandle.name} is up to date`);
     return true;
   } catch (error) {
     console.warn("Could not update backup file.", error);
-    setBackupStatus("attention", "Local save worked · backup update failed");
+    setBackupStatus("attention", "Couldn’t update the backup file");
     return false;
   }
 }
@@ -1875,7 +1871,7 @@ async function handlePhoto(file) {
   try {
     draftPhoto = await compressImage(file);
     updatePhotoPreview();
-    showToast("Photo compressed locally.");
+    showToast("Photo ready.");
   } catch (error) {
     showToast("Could not read that image.");
   }
@@ -2089,7 +2085,7 @@ elements.shareButton.addEventListener("click", () => {
 });
 elements.syncButton.addEventListener("click", () => {
   if (!supabaseClient) {
-    showToast("Cloud sync is still loading. Try again in a moment.");
+    showToast("Sync is still loading. Try again in a moment.");
     return;
   }
   if (cloudUser) {
@@ -2108,7 +2104,7 @@ document.querySelector("#closeAuthButton").addEventListener("click", () => {
 elements.connectBackupButton.addEventListener("click", async () => {
   await backupReadyPromise;
   const connected = await chooseBackupFile();
-  if (connected) showToast("Automatic backup connected and current.");
+  if (connected) showToast("Backup ready.");
 });
 document.querySelector("#closeSettingsButton").addEventListener("click", () => {
   elements.settingsDialog.close();
