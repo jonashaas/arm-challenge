@@ -33,6 +33,11 @@ private Storage bucket. Row Level Security prevents users from reading or
 changing another user's data. The browser only contains Supabase's public key;
 no server or secret key is shipped.
 
+Signed-in users can create a revocable, read-only status link from Settings.
+It publishes only workout totals, logged days, training location, and arm
+measurements. Photos, notes, email addresses, and private account data are not
+included in the shared snapshot.
+
 The automatic JSON file and **Export** remain available as optional backups.
 The database setup is versioned in `supabase/migrations`.
 

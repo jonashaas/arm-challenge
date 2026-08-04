@@ -21,6 +21,7 @@
         <span>BIGGER ARM CHALLENGE</span>
       </a>
       <div class="header-actions">
+        <button class="text-button" id="shareButton" type="button" hidden>Share</button>
         <button class="text-button" id="exportButton" type="button">Export</button>
         <label class="text-button file-button" for="importInput">Import</label>
         <input id="importInput" type="file" accept="application/json" hidden />
@@ -33,6 +34,11 @@
         </button>
       </div>
     </header>
+
+    <aside class="shared-banner" id="sharedBanner" aria-live="polite" hidden>
+      <span><i aria-hidden="true"></i> SHARED PROGRESS</span>
+      <strong>READ ONLY</strong>
+    </aside>
 
     <main>
       <section class="hero">
@@ -91,7 +97,7 @@
             Totals when complete. Daily pace while a week is still in progress.
           </p>
         </div>
-        <div class="weekly-stats-grid" id="weeklyStatsGrid"></div>
+        <div class="weekly-table-wrap" id="weeklyStatsGrid"></div>
       </section>
 
       <section class="tracker-section">
@@ -370,6 +376,30 @@
           <button class="primary-button full-button" id="cloudAuthButton" type="button">
             Sign in to sync
           </button>
+        </section>
+
+        <div class="settings-divider"><span>PUBLIC SHARE</span></div>
+        <section class="share-settings" aria-labelledby="shareSettingsTitle">
+          <div class="settings-section-heading">
+            <span id="shareSettingsTitle">READ-ONLY STATUS LINK</span>
+            <small id="shareStatusText">Sign in first</small>
+          </div>
+          <p>
+            Share totals, logged days, weekly output, and arm measurements.
+            Photos, notes, and account details stay private.
+          </p>
+          <label class="share-link-field" id="shareLinkField" hidden>
+            <span>PUBLIC LINK</span>
+            <input id="shareLinkOutput" type="url" readonly />
+          </label>
+          <div class="share-actions">
+            <button class="primary-button full-button" id="sharePrimaryButton" type="button">
+              Sign in to create link
+            </button>
+            <button class="secondary-button full-button" id="shareStopButton" type="button" hidden>
+              Stop sharing
+            </button>
+          </div>
         </section>
 
         <div class="settings-divider"><span>OPTIONAL FILE BACKUP</span></div>

@@ -1,10 +1,11 @@
 const STORAGE_KEY = "arm32.challenge.v1";
-const DATA_VERSION = 4;
+const DATA_VERSION = 5;
 const CHALLENGE_DAYS = 28;
 const SUPABASE_URL = "https://jthnxivlhwuvfebidanu.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_cLuBojdu2XFHAjBhiijAtA_KRWrrxNt";
 const LIVE_APP_URL = "https://jonashaas.github.io/arm-challenge/";
 const PHOTO_BUCKET = "checkin-photos";
+const PUBLIC_SHARE_BUCKET = "progress-shares";
 const BACKUP_DB_NAME = "arm32.file-backup";
 const BACKUP_STORE_NAME = "handles";
 const BACKUP_HANDLE_KEY = "primary";
@@ -13,6 +14,11 @@ const CHECKIN_DAYS = [1, 7, 14, 21, 28];
 const CHECKIN_LABELS = ["Baseline", "Week 1", "Week 2", "Week 3", "Final"];
 const DAYS_PER_WEEK = 7;
 const CHALLENGE_WEEKS = 4;
+const requestedSharePath = new URLSearchParams(location.search).get("share");
+const publicSharePath = isValidPublicSharePath(requestedSharePath)
+  ? requestedSharePath
+  : null;
+const isSharedView = requestedSharePath !== null;
 
 const createSet = () => ({
   logged: false,
@@ -60,10 +66,11 @@ const emptyState = () => ({
   startedAt: null,
   days: {},
   checkins: {},
+  publicShare: null,
 });
 
 let didMigrateOnLoad = false;
-let state = loadState();
+let state = isSharedView ? emptyState() : loadState();
 let activeDay = 1;
 let activeCheckinDay = 1;
 let draftGroups = createGroups();
@@ -141,6 +148,13 @@ const elements = {
   cloudStatusText: document.querySelector("#cloudStatusText"),
   cloudAccount: document.querySelector("#cloudAccount"),
   cloudAuthButton: document.querySelector("#cloudAuthButton"),
+  shareButton: document.querySelector("#shareButton"),
+  sharedBanner: document.querySelector("#sharedBanner"),
+  shareStatusText: document.querySelector("#shareStatusText"),
+  shareLinkField: document.querySelector("#shareLinkField"),
+  shareLinkOutput: document.querySelector("#shareLinkOutput"),
+  sharePrimaryButton: document.querySelector("#sharePrimaryButton"),
+  shareStopButton: document.querySelector("#shareStopButton"),
   authDialog: document.querySelector("#authDialog"),
   authForm: document.querySelector("#authForm"),
   authEmailInput: document.querySelector("#authEmailInput"),
@@ -150,6 +164,218 @@ const elements = {
   connectBackupButton: document.querySelector("#connectBackupButton"),
   toast: document.querySelector("#toast"),
 };
+
+function isValidPublicSharePath(value) {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.json$/i.test(value);
+}
+
+function normalisePublicShare(value) {
+  if (!value?.enabled || !isValidPublicSharePath(value.path)) return null;
+  return { enabled: true, path: value.path };
+}
+
+function getPublicShareUrl(path = state.publicShare?.path) {
+  if (!isValidPublicSharePath(path)) return "";
+  const url = new URL(LIVE_APP_URL);
+  url.searchParams.set("share", path);
+  return url.toString();
+}
+
+function renderShareControls() {
+  if (isSharedView) return;
+
+  const activeShare = normalisePublicShare(state.publicShare);
+  const shareUrl = activeShare ? getPublicShareUrl(activeShare.path) : "";
+  elements.shareButton.hidden = !cloudUser && !activeShare;
+  elements.shareLinkField.hidden = !activeShare;
+  elements.shareLinkOutput.value = shareUrl;
+
+  if (activeShare) {
+    elements.shareStatusText.textContent = cloudUser
+      ? "Public · read only"
+      : "Public · sign in to manage";
+    elements.sharePrimaryButton.textContent = "Copy public link";
+    elements.shareStopButton.hidden = !cloudUser;
+    return;
+  }
+
+  elements.shareStatusText.textContent = cloudUser ? "Not shared" : "Sign in first";
+  elements.sharePrimaryButton.textContent = cloudUser
+    ? "Create public link"
+    : "Sign in to create link";
+  elements.shareStopButton.hidden = true;
+}
+
+function buildPublicSnapshot() {
+  const days = Object.fromEntries(
+    Object.entries(state.days || {}).map(([day, record]) => [day, {
+      groups: Object.fromEntries(
+        MUSCLE_GROUPS.map((muscle) => [
+          muscle,
+          (record.groups?.[muscle] || []).slice(0, 5).map((set) => ({
+            logged: Boolean(set.logged),
+            reps: normaliseReps(set.reps),
+            weight: set.weight === "" ? "" : Number(set.weight),
+          })),
+        ]),
+      ),
+      complete: Boolean(record.complete),
+      partial: Boolean(record.partial),
+      location: ["gym", "home"].includes(record.location) ? record.location : null,
+      updatedAt: record.updatedAt || null,
+    }]),
+  );
+
+  const checkins = Object.fromEntries(
+    Object.entries(state.checkins || {}).map(([day, record]) => [day, {
+      leftArm: record?.leftArm ?? "",
+      rightArm: record?.rightArm ?? "",
+      updatedAt: record?.updatedAt || null,
+    }]),
+  );
+
+  return {
+    version: DATA_VERSION,
+    updatedAt: state.updatedAt,
+    startedAt: state.startedAt,
+    days,
+    checkins,
+  };
+}
+
+async function syncPublicShare() {
+  const activeShare = normalisePublicShare(state.publicShare);
+  if (!cloudUser || !supabaseClient || !activeShare) return true;
+
+  const payload = new Blob([JSON.stringify(buildPublicSnapshot())], {
+    type: "application/json",
+  });
+  const { error } = await supabaseClient.storage
+    .from(PUBLIC_SHARE_BUCKET)
+    .upload(activeShare.path, payload, {
+      cacheControl: "60",
+      contentType: "application/json",
+      upsert: true,
+    });
+
+  if (error) throw error;
+  return true;
+}
+
+async function removePublicShareAsset(path) {
+  if (!cloudUser || !supabaseClient || !isValidPublicSharePath(path)) return false;
+  const { error } = await supabaseClient.storage
+    .from(PUBLIC_SHARE_BUCKET)
+    .remove([path]);
+  if (error) throw error;
+  return true;
+}
+
+async function loadPublicShare(path) {
+  elements.sharedBanner.hidden = false;
+  document.body.classList.add("shared-view");
+
+  if (!isValidPublicSharePath(path)) {
+    elements.sharedBanner.dataset.state = "error";
+    elements.sharedBanner.innerHTML = '<span><i aria-hidden="true"></i> SHARE LINK INVALID</span><strong>NO DATA LOADED</strong>';
+    return;
+  }
+
+  try {
+    const { data } = supabaseClient.storage
+      .from(PUBLIC_SHARE_BUCKET)
+      .getPublicUrl(path);
+    const publicUrl = new URL(data.publicUrl);
+    publicUrl.searchParams.set("v", String(Date.now()));
+    const response = await fetch(publicUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Share returned ${response.status}`);
+    const snapshot = await response.json();
+    if (!snapshot?.days || !snapshot?.checkins) throw new Error("Invalid share payload");
+
+    state = migrateState(snapshot);
+    render();
+  } catch (error) {
+    console.warn("Could not load public progress share.", error);
+    elements.sharedBanner.dataset.state = "error";
+    elements.sharedBanner.innerHTML = '<span><i aria-hidden="true"></i> SHARE LINK UNAVAILABLE</span><strong>ASK FOR A NEW LINK</strong>';
+  }
+}
+
+async function copyText(value) {
+  if (!value) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch (error) {
+    const input = document.createElement("textarea");
+    input.value = value;
+    input.setAttribute("readonly", "");
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.append(input);
+    input.select();
+    const copied = document.execCommand("copy");
+    input.remove();
+    return copied;
+  }
+}
+
+async function handleSharePrimary() {
+  const activeShare = normalisePublicShare(state.publicShare);
+  if (activeShare) {
+    const copied = await copyText(getPublicShareUrl(activeShare.path));
+    showToast(copied ? "Public link copied." : "Could not copy the link.");
+    return;
+  }
+
+  if (!cloudUser) {
+    elements.settingsDialog.close();
+    openAuthDialog();
+    return;
+  }
+
+  elements.sharePrimaryButton.disabled = true;
+  state.publicShare = {
+    enabled: true,
+    path: `${cloudUser.id}/${crypto.randomUUID()}.json`,
+  };
+  const saved = await persist({ allowBackupSetup: false });
+  elements.sharePrimaryButton.disabled = false;
+  renderShareControls();
+
+  if (!saved || !lastCloudSynced) {
+    showToast("Link saved locally. Cloud retry needed before it is live.");
+    return;
+  }
+
+  await copyText(getPublicShareUrl());
+  showToast("Public read-only link created and copied.");
+}
+
+async function stopPublicSharing() {
+  const activeShare = normalisePublicShare(state.publicShare);
+  if (!activeShare) return;
+  if (!cloudUser) {
+    elements.settingsDialog.close();
+    openAuthDialog();
+    return;
+  }
+
+  elements.shareStopButton.disabled = true;
+  try {
+    await removePublicShareAsset(activeShare.path);
+    state.publicShare = null;
+    await persist({ allowBackupSetup: false });
+    renderShareControls();
+    showToast("Public link disabled.");
+  } catch (error) {
+    console.warn("Could not disable public share.", error);
+    showToast("Could not disable the link. Try again.");
+  } finally {
+    elements.shareStopButton.disabled = false;
+  }
+}
 
 function loadState() {
   try {
@@ -172,6 +398,7 @@ function migrateState(saved) {
     updatedAt: getLatestStateTimestamp(saved),
     startedAt: saved.startedAt || null,
     checkins: remapCheckins(saved.checkins),
+    publicShare: normalisePublicShare(saved.publicShare),
   };
 
   Object.entries(saved.days || {}).forEach(([day, record]) => {
@@ -296,6 +523,7 @@ function setCloudStatus(status, message) {
           : "Local";
   elements.cloudAccount.textContent = cloudUser?.email || "Not signed in";
   elements.cloudAuthButton.textContent = cloudUser ? "Sign out" : "Sign in to sync";
+  renderShareControls();
 }
 
 function setAuthMessage(message, tone = "info") {
@@ -384,12 +612,17 @@ async function initCloudSync() {
     SUPABASE_PUBLISHABLE_KEY,
     {
       auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
+        persistSession: !isSharedView,
+        autoRefreshToken: !isSharedView,
+        detectSessionInUrl: !isSharedView,
       },
     },
   );
+
+  if (isSharedView) {
+    await loadPublicShare(publicSharePath);
+    return;
+  }
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     window.setTimeout(() => {
@@ -471,6 +704,7 @@ async function reconcileCloudState() {
   state = await hydrateCloudPhotos(cloudState);
   writeLocalCache();
   render();
+  await syncPublicShare();
   setCloudStatus("synced", "Cloud current · offline cache ready");
   return true;
 }
@@ -510,6 +744,7 @@ async function writeCloudState() {
   );
 
   if (error) throw error;
+  await syncPublicShare();
   setCloudStatus("synced", "Cloud current · offline cache ready");
   return true;
 }
@@ -890,6 +1125,7 @@ function render() {
   renderDayGrid();
   renderCheckins();
   renderStats();
+  renderShareControls();
 }
 
 function renderDayGrid() {
@@ -956,7 +1192,11 @@ function renderDayGrid() {
         <span class="day-tick">${completed ? "✓" : partial ? "–" : "↗"}</span>
       </span>
     `;
-    button.addEventListener("click", () => openDay(day));
+    if (isSharedView) {
+      button.setAttribute("aria-disabled", "true");
+    } else {
+      button.addEventListener("click", () => openDay(day));
+    }
     elements.dayGrid.append(button);
   }
 }
@@ -1004,7 +1244,11 @@ function renderCheckins() {
         ${renderArmReading("Right", rightArm, rightDelta)}
       </span>
     `;
-    card.addEventListener("click", () => openCheckin(day));
+    if (isSharedView) {
+      card.setAttribute("aria-disabled", "true");
+    } else {
+      card.addEventListener("click", () => openCheckin(day));
+    }
     elements.checkinGrid.append(card);
   });
 }
@@ -1123,47 +1367,51 @@ function getWeeklyDelta(current, previous, key, unit = "") {
 function renderWeeklyStats() {
   const weeks = getWeeklyStats();
   const activeWeek = Math.ceil(getCurrentDay() / DAYS_PER_WEEK);
-  const maxVolume = Math.max(...weeks.map((week) => week.volume), 1);
-  const maxReps = Math.max(...weeks.map((week) => week.reps), 1);
 
-  elements.weeklyStatsGrid.innerHTML = weeks
-    .map((week, index) => {
-      const previous = weeks[index - 1];
-      const volumeDelta = getWeeklyDelta(week, previous, "volume", " kg");
-      const repsDelta = getWeeklyDelta(week, previous, "reps");
-      const hasData = week.daysLogged > 0;
-      const volumeWidth = hasData ? (week.volume / maxVolume) * 100 : 0;
-      const repsWidth = hasData ? (week.reps / maxReps) * 100 : 0;
+  const rows = weeks.map((week, index) => {
+    const previous = weeks[index - 1];
+    const volumeDelta = getWeeklyDelta(week, previous, "volume", " kg");
+    const repsDelta = getWeeklyDelta(week, previous, "reps");
+    const hasData = week.daysLogged > 0;
+    const isActive = week.week === activeWeek;
 
-      return `
-        <article
-          class="week-stat-card${week.week === activeWeek ? " active" : ""}${hasData ? "" : " empty"}"
-          aria-label="Week ${week.week}: ${week.daysLogged} of 7 days logged"
-        >
-          <header class="week-stat-head">
-            <span>WEEK <strong>${String(week.week).padStart(2, "0")}</strong></span>
-            <span>D${String(week.startDay).padStart(2, "0")}–D${String(week.endDay).padStart(2, "0")}</span>
-          </header>
-          <div class="week-stat-days">
-            <strong>${week.daysLogged}/7 DAYS</strong>
-            ${week.week === activeWeek ? "<span>CURRENT</span>" : ""}
-          </div>
-          <div class="week-stat-metric">
-            <span class="week-stat-label">VOLUME</span>
-            <strong>${hasData ? `${formatNumber(week.volume)} <small>kg</small>` : "—"}</strong>
-            <span class="week-stat-delta ${volumeDelta.className}">${volumeDelta.label}</span>
-            <span class="week-stat-meter volume" aria-hidden="true"><i style="width:${volumeWidth}%"></i></span>
-          </div>
-          <div class="week-stat-metric reps">
-            <span class="week-stat-label">REPS</span>
-            <strong>${hasData ? formatNumber(week.reps) : "—"}</strong>
-            <span class="week-stat-delta ${repsDelta.className}">${repsDelta.label}</span>
-            <span class="week-stat-meter reps" aria-hidden="true"><i style="width:${repsWidth}%"></i></span>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+    return `
+      <tr class="${isActive ? "active" : ""}${hasData ? "" : " empty"}">
+        <th scope="row">
+          <span class="week-table-number">${String(week.week).padStart(2, "0")}</span>
+          <small>D${String(week.startDay).padStart(2, "0")}–D${String(week.endDay).padStart(2, "0")}</small>
+        </th>
+        <td>
+          <strong>${week.daysLogged}/7</strong>
+          <small class="week-table-status">${isActive ? '<i aria-hidden="true"></i> CURRENT' : hasData ? "LOGGED" : "UPCOMING"}</small>
+        </td>
+        <td class="numeric">
+          <strong>${hasData ? formatNumber(week.volume) : "—"}</strong>
+          <small>${hasData ? "KG" : ""}</small>
+        </td>
+        <td><span class="week-table-delta ${volumeDelta.className}">${volumeDelta.label}</span></td>
+        <td class="numeric"><strong>${hasData ? formatNumber(week.reps) : "—"}</strong></td>
+        <td><span class="week-table-delta ${repsDelta.className}">${repsDelta.label}</span></td>
+      </tr>
+    `;
+  }).join("");
+
+  elements.weeklyStatsGrid.innerHTML = `
+    <table class="weekly-table">
+      <caption class="sr-only">Weekly volume and reps comparison</caption>
+      <thead>
+        <tr>
+          <th scope="col">WEEK</th>
+          <th scope="col">DAYS</th>
+          <th scope="col">VOLUME</th>
+          <th scope="col">CHANGE</th>
+          <th scope="col">REPS</th>
+          <th scope="col">CHANGE</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 function renderStats() {
@@ -1747,9 +1995,23 @@ function importData(file) {
 async function resetChallenge() {
   const confirmation = window.prompt('Type "RESET" to erase the entire experiment.');
   if (confirmation !== "RESET") return;
+  const activeShare = normalisePublicShare(state.publicShare);
+  if (activeShare && !cloudUser) {
+    showToast("Sign in and stop the public link before resetting.");
+    return;
+  }
   const photoPaths = Object.values(state.checkins)
     .map((record) => record?.photoPath)
     .filter(Boolean);
+  if (activeShare) {
+    try {
+      await removePublicShareAsset(activeShare.path);
+    } catch (error) {
+      console.warn("Could not remove public share before reset.", error);
+      showToast("Could not disable the public link. Reset stopped.");
+      return;
+    }
+  }
   state = emptyState();
   resetRestTimer();
   if (!(await persist({ allowBackupSetup: false }))) return;
@@ -1821,6 +2083,10 @@ document.querySelector("#importInput").addEventListener("change", (event) => {
 document.querySelector("#settingsButton").addEventListener("click", () => {
   elements.settingsDialog.showModal();
 });
+elements.shareButton.addEventListener("click", () => {
+  elements.settingsDialog.showModal();
+  elements.sharePrimaryButton.focus();
+});
 elements.syncButton.addEventListener("click", () => {
   if (!supabaseClient) {
     showToast("Cloud sync is still loading. Try again in a moment.");
@@ -1833,6 +2099,8 @@ elements.syncButton.addEventListener("click", () => {
   }
 });
 elements.cloudAuthButton.addEventListener("click", handleCloudAuthButton);
+elements.sharePrimaryButton.addEventListener("click", handleSharePrimary);
+elements.shareStopButton.addEventListener("click", stopPublicSharing);
 elements.authForm.addEventListener("submit", sendMagicLink);
 document.querySelector("#closeAuthButton").addEventListener("click", () => {
   elements.authDialog.close();
@@ -1877,10 +2145,16 @@ window.addEventListener("online", () => {
   });
 });
 
+if (isSharedView) {
+  document.body.classList.add("shared-view");
+  elements.sharedBanner.hidden = false;
+}
 render();
-backupReadyPromise = initAutomaticBackup();
+backupReadyPromise = isSharedView
+  ? Promise.resolve(false)
+  : initAutomaticBackup();
 cloudReadyPromise = initCloudSync();
-if (didMigrateOnLoad) {
+if (didMigrateOnLoad && !isSharedView) {
   backupReadyPromise.then(() =>
     syncAutomaticBackup({ allowSetup: false }),
   );
