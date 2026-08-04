@@ -305,7 +305,11 @@ function setAuthMessage(message, tone = "info") {
 }
 
 function openAuthDialog() {
-  setAuthMessage("");
+  setAuthMessage(
+    location.protocol === "file:"
+      ? "This link opens the live app. Export this file-based data first, then import it there once."
+      : "",
+  );
   elements.authDialog.showModal();
   elements.authEmailInput.focus();
 }
@@ -360,7 +364,11 @@ async function sendMagicLink(event) {
     return;
   }
 
-  setAuthMessage("Link sent. Open it on this device to finish signing in.");
+  setAuthMessage(
+    location.protocol === "file:"
+      ? "Link sent. Open it, then import this file-based data into the live app once."
+      : "Link sent. Open it on this device to finish signing in.",
+  );
   showToast("Sign-in link sent.");
 }
 

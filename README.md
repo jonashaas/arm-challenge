@@ -22,7 +22,11 @@ Open `index.html` in a browser. No server or installation is required.
 
 The app works local-first. Browser `localStorage` is the fast offline cache.
 Sign in with a one-time email link to make Supabase the cross-device source of
-truth. Existing local data moves into the account automatically on first sign-in.
+truth. Existing data on that web origin moves into the account automatically.
+
+Browser storage is origin-specific. Data saved in the old `file://` version cannot
+be read directly by GitHub Pages. Export it once, sign in on the live app, then use
+**Import existing data** in Settings. All later saves sync automatically.
 
 Each account owns one protected JSON challenge row. Check-in photos live in a
 private Storage bucket. Row Level Security prevents users from reading or
