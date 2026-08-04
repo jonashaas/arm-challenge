@@ -1383,7 +1383,7 @@ function renderWeeklyStats() {
         </th>
         <td>
           <strong>${week.daysLogged}/7</strong>
-          <small class="week-table-status">${isActive ? '<i aria-hidden="true"></i> CURRENT' : hasData ? "LOGGED" : "UPCOMING"}</small>
+          <small class="week-table-status">${isActive ? "CURRENT" : hasData ? "LOGGED" : "UPCOMING"}</small>
         </td>
         <td class="numeric">
           <strong>${hasData ? formatNumber(week.volume) : "—"}</strong>

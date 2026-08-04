@@ -524,15 +524,6 @@ h1 span {
 .week-table-status {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.week-table-status i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--acid);
-  outline: 1px solid var(--ink);
 }
 
 .week-table-delta {
