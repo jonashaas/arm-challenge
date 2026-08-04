@@ -18,12 +18,19 @@ completed-day PR and LOW comparisons.
 
 Open `index.html` in a browser. No server or installation is required.
 
-## Storage
+## Storage and sync
 
-Progress and compressed weekly photos are stored in browser `localStorage`.
-On the first saved change, Chrome asks for one JSON backup file. After that,
-every saved day, check-in, import, clear, or reset automatically rewrites that
-file. The regular **Export** button remains available for extra snapshots.
+The app works local-first. Browser `localStorage` is the fast offline cache.
+Sign in with a one-time email link to make Supabase the cross-device source of
+truth. Existing local data moves into the account automatically on first sign-in.
+
+Each account owns one protected JSON challenge row. Check-in photos live in a
+private Storage bucket. Row Level Security prevents users from reading or
+changing another user's data. The browser only contains Supabase's public key;
+no server or secret key is shipped.
+
+The automatic JSON file and **Export** remain available as optional backups.
+The database setup is versioned in `supabase/migrations`.
 
 ## Credits
 

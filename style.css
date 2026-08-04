@@ -99,6 +99,54 @@ footer {
   gap: 8px;
 }
 
+.sync-button {
+  min-height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sync-button i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.sync-button[data-state="synced"] {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.sync-button[data-state="synced"] i {
+  background: var(--acid);
+  outline: 1px solid var(--ink);
+}
+
+.sync-button[data-state="syncing"] i {
+  background: var(--acid);
+  animation: sync-pulse 900ms ease-in-out infinite alternate;
+}
+
+.sync-button[data-state="error"] i {
+  background: var(--red);
+}
+
+@keyframes sync-pulse {
+  to {
+    opacity: 0.25;
+  }
+}
+
 .text-button,
 .icon-button,
 .close-button {
@@ -1582,6 +1630,56 @@ em {
   width: min(500px, 100%);
 }
 
+.cloud-settings {
+  margin-bottom: 28px;
+  padding: 18px;
+  border: 1px solid var(--ink);
+  background: var(--paper-strong);
+}
+
+.settings-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font: 600 9px/1.25 var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+.settings-section-heading small {
+  max-width: 58%;
+  overflow: hidden;
+  color: var(--muted);
+  font: inherit;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-settings > p {
+  margin: 15px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-divider {
+  position: relative;
+  margin: 2px 0 22px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.settings-divider span {
+  position: relative;
+  top: -7px;
+  padding: 0 10px;
+  background: var(--paper);
+  color: var(--muted);
+  font: 500 8px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
 .settings-copy {
   margin-bottom: 20px;
   color: var(--muted);
@@ -1589,7 +1687,8 @@ em {
   line-height: 1.65;
 }
 
-.backup-status {
+.backup-status,
+.cloud-status {
   min-height: 46px;
   margin-bottom: 12px;
   padding: 0 14px;
@@ -1601,7 +1700,8 @@ em {
   font: 500 10px/1.3 var(--font-mono);
 }
 
-.backup-status i {
+.backup-status i,
+.cloud-status i {
   width: 8px;
   height: 8px;
   flex: 0 0 auto;
@@ -1609,18 +1709,75 @@ em {
   background: var(--line);
 }
 
-.backup-status[data-state="connected"] {
+.backup-status[data-state="connected"],
+.cloud-status[data-state="synced"] {
   border-color: var(--ink);
   color: var(--ink);
 }
 
-.backup-status[data-state="connected"] i {
+.backup-status[data-state="connected"] i,
+.cloud-status[data-state="synced"] i {
   background: var(--acid);
   outline: 1px solid var(--ink);
 }
 
-.backup-status[data-state="attention"] i {
+.backup-status[data-state="attention"] i,
+.cloud-status[data-state="error"] i {
   background: var(--red);
+}
+
+.cloud-status[data-state="syncing"] i {
+  background: var(--acid);
+  animation: sync-pulse 900ms ease-in-out infinite alternate;
+}
+
+.auth-sheet .sheet-card {
+  width: min(470px, 100%);
+}
+
+.auth-copy {
+  margin-bottom: 24px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.auth-email-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-email-field span {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.auth-email-field input {
+  width: 100%;
+  height: 54px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  outline: 0;
+  background: var(--paper-strong);
+  color: var(--ink);
+}
+
+.auth-email-field input:focus {
+  border-color: var(--ink);
+}
+
+.auth-message {
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  font: 500 9px/1.45 var(--font-mono);
+}
+
+.auth-message[data-tone="error"] {
+  border-color: var(--red);
+  color: var(--red);
 }
 
 .full-button {
@@ -1706,6 +1863,15 @@ em {
   }
 
   .header-actions .text-button {
+    display: none;
+  }
+
+  .sync-button {
+    min-width: 36px;
+    padding-inline: 10px;
+  }
+
+  .sync-button span {
     display: none;
   }
 

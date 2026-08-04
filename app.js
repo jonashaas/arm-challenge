@@ -1,6 +1,10 @@
 const STORAGE_KEY = "arm32.challenge.v1";
-const DATA_VERSION = 3;
+const DATA_VERSION = 4;
 const CHALLENGE_DAYS = 28;
+const SUPABASE_URL = "https://jthnxivlhwuvfebidanu.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_cLuBojdu2XFHAjBhiijAtA_KRWrrxNt";
+const LIVE_APP_URL = "https://jonashaas.github.io/arm-challenge/";
+const PHOTO_BUCKET = "checkin-photos";
 const BACKUP_DB_NAME = "arm32.file-backup";
 const BACKUP_STORE_NAME = "handles";
 const BACKUP_HANDLE_KEY = "primary";
@@ -52,6 +56,7 @@ function createPrefilledGroups(day) {
 
 const emptyState = () => ({
   version: DATA_VERSION,
+  updatedAt: null,
   startedAt: null,
   days: {},
   checkins: {},
@@ -70,6 +75,12 @@ let toastTimer;
 let backupHandle = null;
 let backupReadyPromise;
 let lastBackupSynced = false;
+let supabaseClient = null;
+let cloudUser = null;
+let cloudReadyPromise;
+let cloudWriteChain = Promise.resolve(false);
+let cloudSessionPromise = Promise.resolve();
+let lastCloudSynced = false;
 let restTimerStartedAt = null;
 let restTimerInterval = null;
 let restTimerDay = null;
@@ -124,6 +135,17 @@ const elements = {
   photoPreview: document.querySelector("#photoPreview"),
   photoPrompt: document.querySelector("#photoPrompt"),
   settingsDialog: document.querySelector("#settingsDialog"),
+  syncButton: document.querySelector("#syncButton"),
+  syncButtonLabel: document.querySelector("#syncButtonLabel"),
+  cloudStatus: document.querySelector("#cloudStatus"),
+  cloudStatusText: document.querySelector("#cloudStatusText"),
+  cloudAccount: document.querySelector("#cloudAccount"),
+  cloudAuthButton: document.querySelector("#cloudAuthButton"),
+  authDialog: document.querySelector("#authDialog"),
+  authForm: document.querySelector("#authForm"),
+  authEmailInput: document.querySelector("#authEmailInput"),
+  authMessage: document.querySelector("#authMessage"),
+  sendMagicLinkButton: document.querySelector("#sendMagicLinkButton"),
   backupStatus: document.querySelector("#backupStatus"),
   connectBackupButton: document.querySelector("#connectBackupButton"),
   toast: document.querySelector("#toast"),
@@ -147,6 +169,7 @@ function loadState() {
 function migrateState(saved) {
   const migrated = {
     ...emptyState(),
+    updatedAt: getLatestStateTimestamp(saved),
     startedAt: saved.startedAt || null,
     checkins: remapCheckins(saved.checkins),
   };
@@ -217,8 +240,34 @@ function remapCheckins(checkins = {}) {
   return remapped;
 }
 
+function getLatestStateTimestamp(candidate = state) {
+  const timestamps = [
+    candidate?.updatedAt,
+    candidate?.startedAt,
+    ...Object.values(candidate?.days || {}).map((entry) => entry?.updatedAt),
+    ...Object.values(candidate?.checkins || {}).map((entry) => entry?.updatedAt),
+  ]
+    .map((value) => Date.parse(value))
+    .filter(Number.isFinite);
+
+  return timestamps.length
+    ? new Date(Math.max(...timestamps)).toISOString()
+    : null;
+}
+
+function hasMeaningfulState(candidate = state) {
+  return Boolean(
+    candidate?.startedAt ||
+      Object.keys(candidate?.days || {}).length ||
+      Object.keys(candidate?.checkins || {}).length,
+  );
+}
+
 async function persist({ allowBackupSetup = true } = {}) {
   lastBackupSynced = false;
+  lastCloudSynced = false;
+  state.version = DATA_VERSION;
+  state.updatedAt = new Date().toISOString();
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
@@ -226,8 +275,352 @@ async function persist({ allowBackupSetup = true } = {}) {
     return false;
   }
 
-  lastBackupSynced = await syncAutomaticBackup({ allowSetup: allowBackupSetup });
+  lastCloudSynced = await queueCloudSync();
+  lastBackupSynced = await syncAutomaticBackup({
+    allowSetup: allowBackupSetup && !cloudUser,
+  });
   return true;
+}
+
+function setCloudStatus(status, message) {
+  elements.cloudStatus.dataset.state = status;
+  elements.cloudStatusText.textContent = message;
+  elements.syncButton.dataset.state = status;
+  elements.syncButtonLabel.textContent =
+    status === "synced"
+      ? "Synced"
+      : status === "syncing"
+        ? "Syncing"
+        : status === "error"
+          ? "Offline"
+          : "Local";
+  elements.cloudAccount.textContent = cloudUser?.email || "Not signed in";
+  elements.cloudAuthButton.textContent = cloudUser ? "Sign out" : "Sign in to sync";
+}
+
+function setAuthMessage(message, tone = "info") {
+  elements.authMessage.textContent = message;
+  elements.authMessage.dataset.tone = tone;
+  elements.authMessage.hidden = !message;
+}
+
+function openAuthDialog() {
+  setAuthMessage("");
+  elements.authDialog.showModal();
+  elements.authEmailInput.focus();
+}
+
+async function handleCloudAuthButton() {
+  if (!supabaseClient) {
+    showToast("Cloud sync is unavailable. Reload and try again.");
+    return;
+  }
+
+  if (!cloudUser) {
+    openAuthDialog();
+    return;
+  }
+
+  elements.cloudAuthButton.disabled = true;
+  const { error } = await supabaseClient.auth.signOut();
+  elements.cloudAuthButton.disabled = false;
+  if (error) {
+    showToast("Could not sign out. Try again.");
+    return;
+  }
+
+  cloudUser = null;
+  setCloudStatus("local", "Signed out · data remains cached on this device");
+  showToast("Signed out. Local cache kept.");
+}
+
+async function sendMagicLink(event) {
+  event.preventDefault();
+  const email = elements.authEmailInput.value.trim();
+  if (!email || !supabaseClient) return;
+
+  elements.sendMagicLinkButton.disabled = true;
+  elements.sendMagicLinkButton.textContent = "Sending…";
+  setAuthMessage("");
+
+  const { error } = await supabaseClient.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: LIVE_APP_URL,
+      shouldCreateUser: true,
+    },
+  });
+
+  elements.sendMagicLinkButton.disabled = false;
+  elements.sendMagicLinkButton.textContent = "Send sign-in link";
+
+  if (error) {
+    console.warn("Could not send Supabase sign-in link.", error);
+    setAuthMessage(error.message || "Could not send the sign-in link.", "error");
+    return;
+  }
+
+  setAuthMessage("Link sent. Open it on this device to finish signing in.");
+  showToast("Sign-in link sent.");
+}
+
+async function initCloudSync() {
+  if (!window.supabase?.createClient) {
+    setCloudStatus("error", "Cloud client failed to load · local cache still works");
+    elements.cloudAuthButton.disabled = true;
+    return;
+  }
+
+  supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY,
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    },
+  );
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    window.setTimeout(() => {
+      if (event === "SIGNED_OUT" || !session) {
+        cloudUser = null;
+        setCloudStatus("local", "Local only · sign in to sync devices");
+        return;
+      }
+
+      if (!cloudUser || cloudUser.id !== session.user.id) {
+        scheduleCloudSession(session);
+      }
+    }, 0);
+  });
+
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    console.warn("Could not restore Supabase session.", error);
+    setCloudStatus("error", "Cloud session failed · local cache is safe");
+    return;
+  }
+
+  if (data.session) {
+    await scheduleCloudSession(data.session);
+  } else {
+    setCloudStatus("local", "Local only · sign in to sync devices");
+  }
+}
+
+function scheduleCloudSession(session) {
+  cloudSessionPromise = cloudSessionPromise
+    .catch(() => undefined)
+    .then(() => activateCloudSession(session));
+  return cloudSessionPromise;
+}
+
+async function activateCloudSession(session) {
+  if (!session?.user) return;
+  cloudUser = session.user;
+  setCloudStatus("syncing", "Checking cloud state…");
+
+  try {
+    await reconcileCloudState();
+  } catch (error) {
+    console.warn("Could not reconcile Supabase state.", error);
+    setCloudStatus("error", "Cloud unavailable · changes stay cached locally");
+  }
+}
+
+async function reconcileCloudState() {
+  const user = cloudUser;
+  if (!user || !supabaseClient) return false;
+
+  const { data: cloudRow, error } = await supabaseClient
+    .from("challenge_states")
+    .select("data, updated_at")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (!cloudRow) {
+    const migratedExistingData = hasMeaningfulState(state);
+    await writeCloudState();
+    if (migratedExistingData) showToast("Existing data synced to your account.");
+    return true;
+  }
+
+  const cloudState = migrateState(cloudRow.data || emptyState());
+  const localUpdatedAt = Date.parse(getLatestStateTimestamp(state)) || 0;
+  const cloudUpdatedAt =
+    Date.parse(getLatestStateTimestamp(cloudState) || cloudRow.updated_at) || 0;
+
+  if (hasMeaningfulState(state) && localUpdatedAt > cloudUpdatedAt) {
+    await writeCloudState();
+    return true;
+  }
+
+  state = await hydrateCloudPhotos(cloudState);
+  writeLocalCache();
+  render();
+  setCloudStatus("synced", "Cloud current · offline cache ready");
+  return true;
+}
+
+function queueCloudSync() {
+  if (!cloudUser || !supabaseClient) return Promise.resolve(false);
+
+  cloudWriteChain = cloudWriteChain
+    .catch(() => false)
+    .then(async () => {
+      try {
+        await writeCloudState();
+        return true;
+      } catch (error) {
+        console.warn("Could not sync challenge to Supabase.", error);
+        setCloudStatus("error", "Cloud retry needed · local cache is current");
+        return false;
+      }
+    });
+
+  return cloudWriteChain;
+}
+
+async function writeCloudState() {
+  const user = cloudUser;
+  if (!user || !supabaseClient) return false;
+
+  setCloudStatus("syncing", "Saving to cloud…");
+  const cloudState = await prepareCloudState(user.id);
+  const { error } = await supabaseClient.from("challenge_states").upsert(
+    {
+      user_id: user.id,
+      data: cloudState,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
+
+  if (error) throw error;
+  setCloudStatus("synced", "Cloud current · offline cache ready");
+  return true;
+}
+
+async function prepareCloudState(userId) {
+  const cloudState = structuredClone(state);
+  let addedPhotoPath = false;
+
+  for (const [day, record] of Object.entries(cloudState.checkins || {})) {
+    const localRecord = state.checkins[day];
+    if (record?.photo?.startsWith("data:image/")) {
+      const photoFingerprint = await getPhotoFingerprint(record.photo);
+      if (
+        record.photoPath &&
+        record.photoFingerprint === photoFingerprint
+      ) {
+        delete record.photo;
+        continue;
+      }
+
+      const blob = await dataUrlToBlob(record.photo);
+      const extension = getImageExtension(blob.type);
+      const path = record.photoPath || `${userId}/day-${day}.${extension}`;
+      const { error } = await supabaseClient.storage
+        .from(PHOTO_BUCKET)
+        .upload(path, blob, {
+          cacheControl: "3600",
+          contentType: blob.type || "image/jpeg",
+          upsert: true,
+        });
+
+      if (error) throw error;
+      record.photoPath = path;
+      record.photoFingerprint = photoFingerprint;
+      localRecord.photoPath = path;
+      localRecord.photoFingerprint = photoFingerprint;
+      addedPhotoPath = true;
+    }
+
+    if (record?.photoPath) delete record.photo;
+  }
+
+  if (addedPhotoPath) writeLocalCache();
+  return cloudState;
+}
+
+async function hydrateCloudPhotos(cloudState) {
+  const downloads = Object.values(cloudState.checkins || {})
+    .filter((record) => record?.photoPath && !record.photo)
+    .map(async (record) => {
+      const { data, error } = await supabaseClient.storage
+        .from(PHOTO_BUCKET)
+        .download(record.photoPath);
+      if (error) {
+        console.warn("Could not download a check-in photo.", error);
+        return;
+      }
+      record.photo = await blobToDataUrl(data);
+    });
+
+  await Promise.all(downloads);
+  return cloudState;
+}
+
+async function dataUrlToBlob(dataUrl) {
+  const response = await fetch(dataUrl);
+  return response.blob();
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function getImageExtension(type) {
+  if (type === "image/png") return "png";
+  if (type === "image/webp") return "webp";
+  return "jpg";
+}
+
+async function getPhotoFingerprint(dataUrl) {
+  if (!window.crypto?.subtle) {
+    return `${dataUrl.length}:${dataUrl.slice(-32)}`;
+  }
+
+  const bytes = new TextEncoder().encode(dataUrl);
+  const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function writeLocalCache() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
+  } catch (error) {
+    console.warn("Could not update local challenge cache.", error);
+    return false;
+  }
+}
+
+async function removeCloudPhoto(photoPath) {
+  if (!photoPath || !cloudUser || !supabaseClient) return;
+  const { error } = await supabaseClient.storage
+    .from(PHOTO_BUCKET)
+    .remove([photoPath]);
+  if (error) console.warn("Could not remove old check-in photo.", error);
+}
+
+function getSaveDestinationSuffix() {
+  if (lastCloudSynced) return " + cloud synced.";
+  if (lastBackupSynced) return " + backup updated.";
+  if (cloudUser) return " locally; cloud retry queued.";
+  return " locally.";
 }
 
 function setBackupStatus(status, message) {
@@ -1159,7 +1552,7 @@ async function storeTrainingDay(complete, { closeDialog = true } = {}) {
   dayDraftBaseline = getDayDraftSnapshot();
   render();
   const status = complete ? "saved" : "saved as partial";
-  const message = `Day ${String(activeDay).padStart(2, "0")} ${status}${lastBackupSynced ? " + backup updated." : " locally."}`;
+  const message = `Day ${String(activeDay).padStart(2, "0")} ${status}${getSaveDestinationSuffix()}`;
 
   if (closeDialog) {
     elements.dayDialog.close();
@@ -1269,13 +1662,16 @@ async function saveCheckin() {
     rightArm,
     note: elements.noteInput.value.trim(),
     photo: draftPhoto,
+    photoPath: state.checkins[activeCheckinDay]?.photoPath || null,
+    photoFingerprint:
+      state.checkins[activeCheckinDay]?.photoFingerprint || null,
     updatedAt: new Date().toISOString(),
   };
 
   if (await persist()) {
     elements.checkinDialog.close();
     render();
-    showToast(`Check-in saved${lastBackupSynced ? " + backup updated." : " locally."}`);
+    showToast(`Check-in saved${getSaveDestinationSuffix()}`);
   }
 }
 
@@ -1290,8 +1686,10 @@ async function clearCheckin() {
   }
 
   if (!window.confirm(`Clear the day ${activeCheckinDay} check-in?`)) return;
+  const photoPath = state.checkins[activeCheckinDay]?.photoPath;
   delete state.checkins[activeCheckinDay];
   await persist();
+  await removeCloudPhoto(photoPath);
   elements.checkinDialog.close();
   render();
   showToast("Check-in cleared.");
@@ -1318,7 +1716,9 @@ function importData(file) {
       const imported = JSON.parse(reader.result);
       if (
         !imported ||
-        ![1, 2, DATA_VERSION].includes(imported.version) ||
+        !Number.isInteger(imported.version) ||
+        imported.version < 1 ||
+        imported.version > DATA_VERSION ||
         !imported.days ||
         !imported.checkins
       ) {
@@ -1339,10 +1739,13 @@ function importData(file) {
 async function resetChallenge() {
   const confirmation = window.prompt('Type "RESET" to erase the entire experiment.');
   if (confirmation !== "RESET") return;
-  localStorage.removeItem(STORAGE_KEY);
+  const photoPaths = Object.values(state.checkins)
+    .map((record) => record?.photoPath)
+    .filter(Boolean);
   state = emptyState();
   resetRestTimer();
-  lastBackupSynced = await syncAutomaticBackup({ allowSetup: false });
+  if (!(await persist({ allowBackupSetup: false }))) return;
+  await Promise.all(photoPaths.map(removeCloudPhoto));
   elements.settingsDialog.close();
   render();
   showToast("Experiment reset.");
@@ -1410,6 +1813,22 @@ document.querySelector("#importInput").addEventListener("change", (event) => {
 document.querySelector("#settingsButton").addEventListener("click", () => {
   elements.settingsDialog.showModal();
 });
+elements.syncButton.addEventListener("click", () => {
+  if (!supabaseClient) {
+    showToast("Cloud sync is still loading. Try again in a moment.");
+    return;
+  }
+  if (cloudUser) {
+    elements.settingsDialog.showModal();
+  } else {
+    openAuthDialog();
+  }
+});
+elements.cloudAuthButton.addEventListener("click", handleCloudAuthButton);
+elements.authForm.addEventListener("submit", sendMagicLink);
+document.querySelector("#closeAuthButton").addEventListener("click", () => {
+  elements.authDialog.close();
+});
 elements.connectBackupButton.addEventListener("click", async () => {
   await backupReadyPromise;
   const connected = await chooseBackupFile();
@@ -1440,7 +1859,11 @@ window.addEventListener("beforeunload", (event) => {
   event.returnValue = "";
 });
 
-[elements.checkinDialog, elements.settingsDialog].forEach((dialog) => {
+window.addEventListener("online", () => {
+  if (cloudUser) queueCloudSync();
+});
+
+[elements.checkinDialog, elements.settingsDialog, elements.authDialog].forEach((dialog) => {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) dialog.close();
   });
@@ -1448,6 +1871,7 @@ window.addEventListener("beforeunload", (event) => {
 
 render();
 backupReadyPromise = initAutomaticBackup();
+cloudReadyPromise = initCloudSync();
 if (didMigrateOnLoad) {
   backupReadyPromise.then(() =>
     syncAutomaticBackup({ allowSetup: false }),
