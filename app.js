@@ -90,6 +90,8 @@ let lastCloudSynced = false;
 let restTimerStartedAt = null;
 let restTimerInterval = null;
 let restTimerDay = null;
+let showAllDays = false;
+let syncNudgeShown = hasMeaningfulState(state);
 
 const elements = {
   dayGrid: document.querySelector("#dayGrid"),
@@ -132,6 +134,10 @@ const elements = {
   challengeDate: document.querySelector("#challengeDate"),
   todayButton: document.querySelector("#todayButton"),
   todayButtonLabel: document.querySelector("#todayButtonLabel"),
+  checkinDueButton: document.querySelector("#checkinDueButton"),
+  checkinDueButtonLabel: document.querySelector("#checkinDueButtonLabel"),
+  mobileWeekLabel: document.querySelector("#mobileWeekLabel"),
+  toggleAllDaysButton: document.querySelector("#toggleAllDaysButton"),
   checkinDialog: document.querySelector("#checkinDialog"),
   checkinDialogTitle: document.querySelector("#checkinDialogTitle"),
   leftArmInput: document.querySelector("#leftArmInput"),
@@ -161,6 +167,8 @@ const elements = {
   sendMagicLinkButton: document.querySelector("#sendMagicLinkButton"),
   backupStatus: document.querySelector("#backupStatus"),
   connectBackupButton: document.querySelector("#connectBackupButton"),
+  settingsImportButton: document.querySelector("#settingsImportButton"),
+  importInput: document.querySelector("#importInput"),
   toast: document.querySelector("#toast"),
 };
 
@@ -519,6 +527,7 @@ function setCloudStatus(status, message) {
         : status === "error"
           ? "Offline"
           : "Sync";
+  elements.syncButton.setAttribute("aria-label", `Sync status: ${message}`);
   elements.cloudAccount.textContent = cloudUser?.email || "Not signed in";
   elements.cloudAuthButton.textContent = cloudUser ? "Sign out" : "Sign in to sync";
   renderShareControls();
@@ -1124,6 +1133,19 @@ function render() {
   renderShareControls();
 }
 
+function renderMobileDayFilter(currentDay = getCurrentDay()) {
+  const activeWeek = Math.ceil(currentDay / DAYS_PER_WEEK);
+  const startDay = (activeWeek - 1) * DAYS_PER_WEEK + 1;
+  const endDay = startDay + DAYS_PER_WEEK - 1;
+  elements.mobileWeekLabel.textContent =
+    `Week ${activeWeek} · D${String(startDay).padStart(2, "0")}–D${String(endDay).padStart(2, "0")}`;
+  elements.toggleAllDaysButton.textContent = showAllDays
+    ? "Show current week"
+    : "View all days";
+  elements.toggleAllDaysButton.setAttribute("aria-expanded", String(showAllDays));
+  elements.dayGrid.classList.toggle("show-all", showAllDays);
+}
+
 function renderDayGrid() {
   const currentDay = getCurrentDay();
   const { highestDay, lowestDay } = getVolumeExtremes();
@@ -1158,6 +1180,9 @@ function renderDayGrid() {
       partial ? "partial" : "",
       day === currentDay ? "current" : "",
       CHECKIN_DAYS.includes(day) ? "checkin" : "",
+      Math.ceil(day / DAYS_PER_WEEK) !== Math.ceil(currentDay / DAYS_PER_WEEK)
+        ? "outside-current-week"
+        : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -1175,12 +1200,12 @@ function renderDayGrid() {
         <span class="day-metric">
           <small>Volume</small>
           <b>${stats.sets ? `${formatNumber(stats.volume)} kg` : "—"}</b>
-          <span class="day-delta ${volumeDelta.className}">${stats.sets ? volumeDelta.label : "No data yet"}</span>
+          <span class="day-delta ${volumeDelta.className}">${stats.sets ? volumeDelta.label : ""}</span>
         </span>
         <span class="day-metric">
           <small>Reps</small>
           <b>${stats.sets ? formatNumber(stats.reps) : "—"}</b>
-          <span class="day-delta ${repsDelta.className}">${stats.sets ? repsDelta.label : "No data yet"}</span>
+          <span class="day-delta ${repsDelta.className}">${stats.sets ? repsDelta.label : ""}</span>
         </span>
       </span>
       <span class="day-meta">
@@ -1195,6 +1220,8 @@ function renderDayGrid() {
     }
     elements.dayGrid.append(button);
   }
+
+  renderMobileDayFilter(currentDay);
 }
 
 function getDelta(current, previous, unit) {
@@ -1315,22 +1342,23 @@ function getWeeklyStats() {
   });
 }
 
-function getWeeklyDelta(current, previous, key, unit = "") {
+function getWeeklyDelta(current, previous, key) {
   if (!current.daysLogged) {
-    return { label: "NO DATA", className: "neutral" };
+    return { label: "—", className: "neutral" };
   }
   if (!previous?.daysLogged) {
-    return { label: "FIRST WEEK", className: "neutral" };
+    return { label: "BASELINE", className: "neutral" };
   }
 
-  const comparePace =
+  const compareDailyAverage =
     current.daysLogged < DAYS_PER_WEEK || previous.daysLogged < DAYS_PER_WEEK;
-  const currentValue = comparePace
+  const currentValue = compareDailyAverage
     ? current[key] / current.daysLogged
     : current[key];
-  const previousValue = comparePace
+  const previousValue = compareDailyAverage
     ? previous[key] / previous.daysLogged
     : previous[key];
+  const comparisonLabel = compareDailyAverage ? "AVG/DAY" : "TOTAL";
 
   if (!previousValue) {
     return { label: "NO BASELINE", className: "neutral" };
@@ -1341,7 +1369,7 @@ function getWeeklyDelta(current, previous, key, unit = "") {
 
   if (difference === 0) {
     return {
-      label: comparePace ? "0.0% PACE" : `0${unit} · 0.0%`,
+      label: `0.0% ${comparisonLabel}`,
       className: "neutral",
     };
   }
@@ -1350,14 +1378,7 @@ function getWeeklyDelta(current, previous, key, unit = "") {
   const className = difference > 0 ? "up" : "down";
   const percentLabel = `${sign}${Math.abs(percentage).toFixed(1)}%`;
 
-  if (comparePace) {
-    return { label: `${percentLabel} PACE`, className };
-  }
-
-  return {
-    label: `${sign}${formatNumber(Math.abs(difference))}${unit} · ${percentLabel}`,
-    className,
-  };
+  return { label: `${percentLabel} ${comparisonLabel}`, className };
 }
 
 function renderWeeklyStats() {
@@ -1366,7 +1387,7 @@ function renderWeeklyStats() {
 
   const rows = weeks.map((week, index) => {
     const previous = weeks[index - 1];
-    const volumeDelta = getWeeklyDelta(week, previous, "volume", " kg");
+    const volumeDelta = getWeeklyDelta(week, previous, "volume");
     const repsDelta = getWeeklyDelta(week, previous, "reps");
     const hasData = week.daysLogged > 0;
     const isActive = week.week === activeWeek;
@@ -1379,15 +1400,17 @@ function renderWeeklyStats() {
         </th>
         <td>
           <strong>${week.daysLogged}/7</strong>
-          <small class="week-table-status">${isActive ? "CURRENT" : hasData ? "LOGGED" : "UPCOMING"}</small>
+          <small class="week-table-status">${isActive ? "CURRENT" : ""}</small>
         </td>
         <td class="numeric">
           <strong>${hasData ? formatNumber(week.volume) : "—"}</strong>
           <small>${hasData ? "KG" : ""}</small>
+          ${hasData ? `<span class="week-table-delta ${volumeDelta.className}">${volumeDelta.label}</span>` : ""}
         </td>
-        <td><span class="week-table-delta ${volumeDelta.className}">${volumeDelta.label}</span></td>
-        <td class="numeric"><strong>${hasData ? formatNumber(week.reps) : "—"}</strong></td>
-        <td><span class="week-table-delta ${repsDelta.className}">${repsDelta.label}</span></td>
+        <td class="numeric">
+          <strong>${hasData ? formatNumber(week.reps) : "—"}</strong>
+          ${hasData ? `<span class="week-table-delta ${repsDelta.className}">${repsDelta.label}</span>` : ""}
+        </td>
       </tr>
     `;
   }).join("");
@@ -1400,9 +1423,7 @@ function renderWeeklyStats() {
           <th scope="col">WEEK</th>
           <th scope="col">DAYS</th>
           <th scope="col">VOLUME</th>
-          <th scope="col">CHANGE</th>
           <th scope="col">REPS</th>
-          <th scope="col">CHANGE</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -1442,6 +1463,21 @@ function renderStats() {
       : isDayLogged(currentRecord)
         ? `Review day ${String(currentDay).padStart(2, "0")}`
         : `${state.startedAt ? "Log" : "Start"} day ${String(currentDay).padStart(2, "0")}`;
+
+  const dueCheckinDay = isSharedView
+    ? null
+    : CHECKIN_DAYS.find((day) => day <= currentDay && !state.checkins[day]);
+  elements.checkinDueButton.hidden = !dueCheckinDay;
+  if (dueCheckinDay) {
+    const checkinIndex = CHECKIN_DAYS.indexOf(dueCheckinDay);
+    elements.checkinDueButton.dataset.day = String(dueCheckinDay);
+    elements.checkinDueButtonLabel.textContent =
+      checkinIndex === 0
+        ? "Add baseline check-in"
+        : `Add ${CHECKIN_LABELS[checkinIndex].toLowerCase()} check-in`;
+  } else {
+    delete elements.checkinDueButton.dataset.day;
+  }
 
   if (state.startedAt) {
     elements.challengeDate.textContent = `since ${formatDate(state.startedAt)}`;
@@ -1670,14 +1706,14 @@ function renderGroupList(muscle, container) {
           aria-label="${muscle} set ${index + 1} weight per arm in kilograms"
           placeholder="0"
         />
-        <small>KG / ARM</small>
+        <small>KG/ARM</small>
       </label>
       <span class="reps-control">
         <button type="button" class="rep-step rep-minus" aria-label="Decrease reps" ${set.reps <= 0 ? "disabled" : ""}>−</button>
         <span class="rep-value"><strong>${set.reps}</strong><small>REPS</small></span>
         <button type="button" class="rep-step rep-plus" aria-label="Increase reps" ${set.reps >= 30 ? "disabled" : ""}>+</button>
       </span>
-      <span class="set-volume"><strong>${formatNumber(getSetVolume(set))}</strong><small>KG MOVED</small></span>
+      <span class="set-volume"><strong>${formatNumber(getSetVolume(set))}</strong><small>VOLUME</small></span>
       <button type="button" class="set-enable" aria-label="${set.logged ? "Remove" : "Log"} ${muscle} set ${index + 1}"></button>
     `;
 
@@ -1687,18 +1723,8 @@ function renderGroupList(muscle, container) {
 
     weightInput.addEventListener("input", (event) => {
       clearDayStatus();
-      const wasLogged = set.logged;
       set.weight = event.target.value;
-      set.logged = Number(set.weight) > 0;
-      if (!wasLogged && set.logged) {
-        startRestTimer();
-      }
       setVolume.textContent = formatNumber(getSetVolume(set));
-      row.classList.toggle("logged", set.logged);
-      enableButton.setAttribute(
-        "aria-label",
-        `${set.logged ? "Remove" : "Log"} ${muscle} set ${index + 1}`,
-      );
       updateDaySummary();
     });
 
@@ -1782,6 +1808,7 @@ async function savePartialDay() {
 }
 
 async function storeTrainingDay(complete, { closeDialog = true } = {}) {
+  const shouldSuggestSync = !cloudUser && !syncNudgeShown && !isSharedView;
   if (!state.startedAt) {
     state.startedAt = new Date().toISOString();
   }
@@ -1802,9 +1829,13 @@ async function storeTrainingDay(complete, { closeDialog = true } = {}) {
     return false;
   }
   dayDraftBaseline = getDayDraftSnapshot();
+  syncNudgeShown = true;
   render();
   const status = complete ? "saved" : "saved as partial";
-  const message = `Day ${String(activeDay).padStart(2, "0")} ${status}${getSaveDestinationSuffix()}`;
+  const syncSuggestion = shouldSuggestSync
+    ? " Sign in to use it on other devices."
+    : "";
+  const message = `Day ${String(activeDay).padStart(2, "0")} ${status}${getSaveDestinationSuffix()}${syncSuggestion}`;
 
   if (closeDialog) {
     elements.dayDialog.close();
@@ -2039,6 +2070,14 @@ function showToast(message) {
 }
 
 elements.todayButton.addEventListener("click", () => openDay(getCurrentDay()));
+elements.checkinDueButton.addEventListener("click", () => {
+  const day = Number(elements.checkinDueButton.dataset.day);
+  if (CHECKIN_DAYS.includes(day)) openCheckin(day);
+});
+elements.toggleAllDaysButton.addEventListener("click", () => {
+  showAllDays = !showAllDays;
+  renderMobileDayFilter();
+});
 document
   .querySelector("#closeDayButton")
   .addEventListener("click", requestCloseDayDialog);
@@ -2070,9 +2109,9 @@ elements.trainingLocationButtons.forEach((button) => {
 document.querySelector("#saveCheckinButton").addEventListener("click", saveCheckin);
 document.querySelector("#clearCheckinButton").addEventListener("click", clearCheckin);
 elements.photoInput.addEventListener("change", (event) => handlePhoto(event.target.files[0]));
-document.querySelector("#exportButton").addEventListener("click", exportData);
 document.querySelector("#settingsExportButton").addEventListener("click", exportData);
-document.querySelector("#importInput").addEventListener("change", (event) => {
+elements.settingsImportButton.addEventListener("click", () => elements.importInput.click());
+elements.importInput.addEventListener("change", (event) => {
   importData(event.target.files[0]);
   event.target.value = "";
 });

@@ -22,10 +22,13 @@
       </a>
       <div class="header-actions">
         <button class="text-button" id="shareButton" type="button" hidden>Share</button>
-        <button class="text-button" id="exportButton" type="button">Export</button>
-        <label class="text-button file-button" for="importInput">Import</label>
-        <input id="importInput" type="file" accept="application/json" hidden />
-        <button class="sync-button" id="syncButton" type="button" data-state="local">
+        <button
+          class="sync-button"
+          id="syncButton"
+          type="button"
+          data-state="local"
+          aria-label="Sync settings"
+        >
           <i aria-hidden="true"></i>
           <span id="syncButtonLabel">Sync</span>
         </button>
@@ -43,11 +46,7 @@
     <main>
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">THE 28-DAY EXPERIMENT</p>
           <h1>Show up.<br /><span>Log the work.</span></h1>
-          <p class="hero-subtitle">
-            Triceps first. Biceps second. 5 sets each. Target 9–12 reps. Every day.
-          </p>
         </div>
 
         <div class="hero-status">
@@ -57,10 +56,16 @@
               <span class="progress-label">OF 28 DAYS</span>
             </div>
           </div>
-          <button class="primary-button" id="todayButton" type="button">
-            <span id="todayButtonLabel">Start day 01</span>
-            <span aria-hidden="true">↗</span>
-          </button>
+          <div class="hero-actions">
+            <button class="primary-button" id="todayButton" type="button">
+              <span id="todayButtonLabel">Start day 01</span>
+              <span aria-hidden="true">↗</span>
+            </button>
+            <button class="secondary-button checkin-due-button" id="checkinDueButton" type="button" hidden>
+              <span id="checkinDueButtonLabel">Add baseline</span>
+              <span aria-hidden="true">↗</span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -73,7 +78,6 @@
         <article class="stat">
           <span class="stat-label">TOTAL REPS</span>
           <strong id="totalReps">0</strong>
-          <span class="stat-unit">controlled</span>
         </article>
         <article class="stat">
           <span class="stat-label">ARM CHANGE</span>
@@ -89,23 +93,21 @@
 
       <section class="weekly-stats-section" aria-labelledby="weeklyStatsTitle">
         <div class="weekly-stats-heading">
-          <div>
-            <p class="eyebrow">WEEKLY OUTPUT</p>
-            <h2 id="weeklyStatsTitle">Week over week.</h2>
-          </div>
-          <p>
-            Totals when complete. Daily pace while a week is still in progress.
-          </p>
+          <h2 id="weeklyStatsTitle">Weekly.</h2>
         </div>
         <div class="weekly-table-wrap" id="weeklyStatsGrid"></div>
       </section>
 
+      <section class="checkin-section">
+        <div class="section-heading">
+          <h2>Check-ins.</h2>
+        </div>
+        <div class="checkin-grid" id="checkinGrid"></div>
+      </section>
+
       <section class="tracker-section">
         <div class="section-heading">
-          <div>
-            <p class="eyebrow">DAILY LOG</p>
-            <h2>28 days. Four weeks.</h2>
-          </div>
+          <h2>Daily log.</h2>
           <div class="legend" aria-label="Tracker legend">
             <span><i class="legend-dot complete"></i>Done</span>
             <span><i class="legend-dot partial"></i>Partial</span>
@@ -116,7 +118,6 @@
 
         <div class="challenge-progress">
           <div class="challenge-progress-copy">
-            <span>CHALLENGE PROGRESS</span>
             <strong id="progressBarLabel">0 / 28 days logged</strong>
           </div>
           <div
@@ -141,26 +142,16 @@
           </div>
         </div>
 
-        <div class="day-grid" id="dayGrid" aria-label="28 day challenge tracker"></div>
-      </section>
-
-      <section class="checkin-section">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">PROOF OF WORK</p>
-            <h2>Weekly check-ins.</h2>
-          </div>
-          <p class="section-note">
-            Same place. Same light. Same measuring method.
-          </p>
+        <div class="mobile-day-filter">
+          <span id="mobileWeekLabel">Week 1 · D01–D07</span>
+          <button id="toggleAllDaysButton" type="button" aria-controls="dayGrid" aria-expanded="false">View all days</button>
         </div>
-        <div class="checkin-grid" id="checkinGrid"></div>
+        <div class="day-grid" id="dayGrid" aria-label="28 day challenge tracker"></div>
       </section>
     </main>
 
     <footer>
       <span>BIGGER ARM CHALLENGE</span>
-      <span>Your progress stays saved.</span>
     </footer>
 
     <dialog class="sheet" id="dayDialog">
@@ -244,7 +235,7 @@
           </button>
           <div class="save-group">
             <button class="secondary-button partial-save" id="savePartialDayButton" type="button">
-              Quick save
+              Save progress
             </button>
             <button class="primary-button save-button" id="saveDayButton" type="button">
               Save day
@@ -354,7 +345,6 @@
       <div class="sheet-card">
         <div class="sheet-top">
           <div>
-            <p class="eyebrow">DATA &amp; SYNC</p>
             <h2>Settings</h2>
           </div>
           <button class="close-button" id="closeSettingsButton" type="button" aria-label="Close">×</button>
@@ -413,9 +403,10 @@
         <button class="primary-button full-button" id="connectBackupButton" type="button">
           Choose backup file
         </button>
-        <label class="secondary-button full-button settings-import-button" for="importInput">
+        <button class="secondary-button full-button settings-import-button" id="settingsImportButton" type="button">
           Import data
-        </label>
+        </button>
+        <input id="importInput" type="file" accept="application/json" hidden />
         <button class="secondary-button full-button" id="settingsExportButton" type="button">
           Download backup
         </button>
@@ -429,7 +420,6 @@
       <form class="sheet-card" id="authForm">
         <div class="sheet-top">
           <div>
-            <p class="eyebrow">PRIVATE CLOUD SYNC</p>
             <h2>Sign in.</h2>
           </div>
           <button class="close-button" id="closeAuthButton" type="button" aria-label="Close">×</button>
