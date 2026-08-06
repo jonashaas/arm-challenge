@@ -10,9 +10,10 @@ record stays honest. One row represents both arms, so daily volume is calculated
 as `kg × reps × 2`. A new training pre-fills kg and reps from the most recent
 completed day while leaving every set unchecked.
 
-Days with fewer than 5 sets for either muscle can be saved as partial. Partial
-days retain honest reps and volume, advance the challenge, and are excluded from
-completed-day PR and LOW comparisons.
+The single **Save day** button accepts any honest workout. Five logged sets for
+each muscle marks the day complete; fewer sets mark it partial. Recovery days
+can be flagged separately, stay filled in the calendar, and are excluded from
+PR and LOW comparisons.
 
 ## Run
 

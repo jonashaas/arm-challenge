@@ -110,6 +110,7 @@
           <h2>Daily log.</h2>
           <div class="legend" aria-label="Tracker legend">
             <span><i class="legend-dot complete"></i>Done</span>
+            <span><i class="legend-dot recovery"></i>Recovery</span>
             <span><i class="legend-dot partial"></i>Partial</span>
             <span><i class="legend-dot current"></i>Current</span>
             <span><i class="legend-dot checkin"></i>Check-in</span>
@@ -183,6 +184,11 @@
           </div>
         </div>
 
+        <label class="recovery-option">
+          <input id="recoveryDayInput" type="checkbox" />
+          <span>Recovery day</span>
+        </label>
+
         <div class="rest-timer inactive" id="restTimer" role="timer">
           <span class="rest-timer-label">REST</span>
           <strong id="restTimerValue">00:00</strong>
@@ -233,14 +239,9 @@
           <button class="secondary-button danger-text" id="clearDayButton" type="button">
             Clear day
           </button>
-          <div class="save-group">
-            <button class="secondary-button partial-save" id="savePartialDayButton" type="button">
-              Save progress
-            </button>
-            <button class="primary-button save-button" id="saveDayButton" type="button">
-              Save day
-            </button>
-          </div>
+          <button class="primary-button save-button" id="saveDayButton" type="button">
+            Save day
+          </button>
         </div>
       </form>
 

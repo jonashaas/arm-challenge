@@ -1,5 +1,5 @@
 const STORAGE_KEY = "arm32.challenge.v1";
-const DATA_VERSION = 5;
+const DATA_VERSION = 6;
 const CHALLENGE_DAYS = 28;
 const SUPABASE_URL = "https://jthnxivlhwuvfebidanu.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_cLuBojdu2XFHAjBhiijAtA_KRWrrxNt";
@@ -75,6 +75,7 @@ let activeDay = 1;
 let activeCheckinDay = 1;
 let draftGroups = createGroups();
 let draftLocation = "gym";
+let draftRecovery = false;
 let dayDraftBaseline = null;
 let dayClosePending = false;
 let draftPhoto = null;
@@ -117,6 +118,7 @@ const elements = {
   trainingLocationButtons: Array.from(
     document.querySelectorAll("[data-training-location]"),
   ),
+  recoveryDayInput: document.querySelector("#recoveryDayInput"),
   tricepsBlockTotal: document.querySelector("#tricepsBlockTotal"),
   bicepsBlockTotal: document.querySelector("#bicepsBlockTotal"),
   completedDays: document.querySelector("#completedDays"),
@@ -229,6 +231,7 @@ function buildPublicSnapshot() {
       ),
       complete: Boolean(record.complete),
       partial: Boolean(record.partial),
+      recovery: Boolean(record.recovery),
       location: ["gym", "home"].includes(record.location) ? record.location : null,
       updatedAt: record.updatedAt || null,
     }]),
@@ -438,11 +441,13 @@ function migrateState(saved) {
 
     const complete = isCompleteGroups(groups);
     const hasLoggedSets = getLoggedSetsFromGroups(groups).length > 0;
+    const recovery = Boolean(record.recovery);
 
     migrated.days[day] = {
       groups,
       complete,
-      partial: !complete && hasLoggedSets,
+      partial: !complete && (hasLoggedSets || recovery),
+      recovery,
       location: ["gym", "home"].includes(record.location)
         ? record.location
         : null,
@@ -1069,12 +1074,8 @@ function isCompleteGroups(groups) {
   });
 }
 
-function getCompletedDays() {
-  return getChallengeDayEntries().filter(([, day]) => day.complete).length;
-}
-
 function isDayLogged(record) {
-  return Boolean(record?.complete || record?.partial);
+  return Boolean(record?.complete || record?.partial || record?.recovery);
 }
 
 function getChallengeDayEntries() {
@@ -1106,7 +1107,7 @@ function getCurrentDay() {
 
 function getVolumeExtremes() {
   const completed = getChallengeDayEntries()
-    .filter(([, record]) => record.complete)
+    .filter(([, record]) => record.complete && !record.recovery)
     .map(([day, record]) => ({
       day: Number(day),
       volume: getDayStats(record).volume,
@@ -1155,6 +1156,7 @@ function renderDayGrid() {
     const record = state.days[day];
     const completed = Boolean(record?.complete);
     const partial = Boolean(record?.partial);
+    const recovery = Boolean(record?.recovery);
     const location = ["gym", "home"].includes(record?.location)
       ? record.location
       : null;
@@ -1164,7 +1166,11 @@ function renderDayGrid() {
     const volumeDelta = getDelta(stats.volume, previousStats?.volume, "kg");
     const repsDelta = getDelta(stats.reps, previousStats?.reps, "");
     const badges = [
-      partial ? '<span class="day-badge partial">PARTIAL</span>' : "",
+      recovery
+        ? '<span class="day-badge recovery">RECOVERY</span>'
+        : partial
+          ? '<span class="day-badge partial">PARTIAL</span>'
+          : "",
       isDayLogged(record) && location
         ? `<span class="day-badge location">${location.toUpperCase()}</span>`
         : "",
@@ -1176,8 +1182,9 @@ function renderDayGrid() {
     button.type = "button";
     button.className = [
       "day-card",
-      completed ? "complete" : "",
-      partial ? "partial" : "",
+      completed && !recovery ? "complete" : "",
+      partial && !recovery ? "partial" : "",
+      recovery ? "recovery" : "",
       day === currentDay ? "current" : "",
       CHECKIN_DAYS.includes(day) ? "checkin" : "",
       Math.ceil(day / DAYS_PER_WEEK) !== Math.ceil(currentDay / DAYS_PER_WEEK)
@@ -1188,7 +1195,7 @@ function renderDayGrid() {
       .join(" ");
     button.setAttribute(
       "aria-label",
-      `Day ${day}, ${completed ? "complete" : partial ? "partial" : day === currentDay ? "current" : "not complete"}${location ? `, ${location}` : ""}`,
+      `Day ${day}, ${recovery ? "recovery" : completed ? "complete" : partial ? "partial" : day === currentDay ? "current" : "not complete"}${location ? `, ${location}` : ""}`,
     );
 
     button.innerHTML = `
@@ -1210,7 +1217,7 @@ function renderDayGrid() {
       </span>
       <span class="day-meta">
         <span>${stats.sets ? `${stats.sets}/10 sets` : day === currentDay ? "Log today" : "Open"}</span>
-        <span class="day-tick">${completed ? "✓" : partial ? "–" : "↗"}</span>
+        <span class="day-tick">${completed || recovery ? "✓" : partial ? "–" : "↗"}</span>
       </span>
     `;
     if (isSharedView) {
@@ -1432,7 +1439,6 @@ function renderWeeklyStats() {
 }
 
 function renderStats() {
-  const completed = getCompletedDays();
   const loggedSets = getChallengeDayEntries().flatMap(([, record]) =>
     getLoggedSets(record),
   );
@@ -1443,10 +1449,10 @@ function renderStats() {
   ).length;
   const currentRecord = state.days[currentDay];
 
-  elements.completedDays.textContent = completed;
+  elements.completedDays.textContent = loggedDays;
   elements.progressOrbit.style.setProperty(
     "--progress",
-    `${(completed / CHALLENGE_DAYS) * 360}deg`,
+    `${(loggedDays / CHALLENGE_DAYS) * 360}deg`,
   );
   elements.progressBarFill.style.width =
     `${(loggedDays / CHALLENGE_DAYS) * 100}%`;
@@ -1521,6 +1527,7 @@ function openDay(day) {
   const saved = state.days[day]?.groups;
   draftGroups = saved ? structuredClone(saved) : createPrefilledGroups(day);
   draftLocation = getTrainingLocation(day);
+  draftRecovery = Boolean(state.days[day]?.recovery);
   dayDraftBaseline = getDayDraftSnapshot();
   elements.dayDialogTitle.textContent = `Day ${String(day).padStart(2, "0")}`;
   elements.dayDialogEyebrow.textContent =
@@ -1528,6 +1535,7 @@ function openDay(day) {
   hideDayClosePrompt({ restoreFocus: false });
   clearDayStatus();
   renderTrainingLocation();
+  elements.recoveryDayInput.checked = draftRecovery;
   renderSetLists();
   elements.dayDialog.showModal();
 }
@@ -1536,6 +1544,7 @@ function getDayDraftSnapshot() {
   return JSON.stringify({
     groups: draftGroups,
     location: draftLocation,
+    recovery: draftRecovery,
   });
 }
 
@@ -1583,7 +1592,7 @@ async function saveCurrentDayAndClose() {
   hideDayClosePrompt({ restoreFocus: false });
 
   try {
-    await storeTrainingDay(isCompleteGroups(draftGroups));
+    await storeTrainingDay();
   } finally {
     dayClosePending = false;
     elements.discardDayChangesButton.disabled = false;
@@ -1774,41 +1783,14 @@ function updateDaySummary() {
 }
 
 async function saveDay() {
-  const invalidGroup = MUSCLE_GROUPS.find((muscle) => {
-    const logged = draftGroups[muscle].filter((set) => set.logged);
-    return logged.length !== 5;
-  });
-
-  if (invalidGroup) {
-    showDayStatus(
-      `Not complete · log all 5 ${invalidGroup.toLowerCase()} sets.`,
-      "warning",
-    );
-    return;
-  }
-
-  const missingWeight = getLoggedSetsFromGroups(draftGroups).some(
-    (set) => Number(set.weight) <= 0,
-  );
-  if (missingWeight) {
-    showDayStatus("Not complete · add kg to every logged set.", "warning");
-    return;
-  }
-
-  await storeTrainingDay(true);
+  await storeTrainingDay();
 }
 
-async function savePartialDay() {
-  if (!hasUnsavedDayChanges()) {
-    showDayStatus("No new changes to save.", "warning");
-    return;
-  }
-
-  await storeTrainingDay(isCompleteGroups(draftGroups), { closeDialog: false });
-}
-
-async function storeTrainingDay(complete, { closeDialog = true } = {}) {
+async function storeTrainingDay() {
   const shouldSuggestSync = !cloudUser && !syncNudgeShown && !isSharedView;
+  const complete = isCompleteGroups(draftGroups);
+  const hasLoggedSets = getLoggedSetsFromGroups(draftGroups).length > 0;
+  const partial = !complete && (hasLoggedSets || draftRecovery);
   if (!state.startedAt) {
     state.startedAt = new Date().toISOString();
   }
@@ -1816,7 +1798,8 @@ async function storeTrainingDay(complete, { closeDialog = true } = {}) {
   state.days[activeDay] = {
     groups: structuredClone(draftGroups),
     complete,
-    partial: !complete,
+    partial,
+    recovery: draftRecovery,
     location: draftLocation,
     updatedAt: new Date().toISOString(),
   };
@@ -1831,18 +1814,20 @@ async function storeTrainingDay(complete, { closeDialog = true } = {}) {
   dayDraftBaseline = getDayDraftSnapshot();
   syncNudgeShown = true;
   render();
-  const status = complete ? "saved" : "saved as partial";
+  const status = draftRecovery
+    ? "saved as recovery"
+    : complete
+      ? "saved"
+      : partial
+        ? "saved as partial"
+        : "saved";
   const syncSuggestion = shouldSuggestSync
     ? " Sign in to use it on other devices."
     : "";
   const message = `Day ${String(activeDay).padStart(2, "0")} ${status}${getSaveDestinationSuffix()}${syncSuggestion}`;
 
-  if (closeDialog) {
-    elements.dayDialog.close();
-    showToast(message);
-  } else {
-    showDayStatus(`${message} Keep going.`);
-  }
+  elements.dayDialog.close();
+  showToast(message);
 
   return true;
 }
@@ -1852,8 +1837,10 @@ async function clearDay() {
     resetRestTimer();
     draftGroups = createPrefilledGroups(activeDay);
     draftLocation = getTrainingLocation(activeDay);
+    draftRecovery = false;
     dayDraftBaseline = getDayDraftSnapshot();
     renderTrainingLocation();
+    elements.recoveryDayInput.checked = false;
     renderSetLists();
     return;
   }
@@ -1864,8 +1851,10 @@ async function clearDay() {
   resetRestTimer();
   draftGroups = createPrefilledGroups(activeDay);
   draftLocation = getTrainingLocation(activeDay);
+  draftRecovery = false;
   dayDraftBaseline = getDayDraftSnapshot();
   renderTrainingLocation();
+  elements.recoveryDayInput.checked = false;
   renderSetLists();
   render();
   showToast(`Day ${String(activeDay).padStart(2, "0")} cleared.`);
@@ -2085,9 +2074,6 @@ document.querySelector("#closeCheckinButton").addEventListener("click", () => {
   elements.checkinDialog.close();
 });
 document.querySelector("#saveDayButton").addEventListener("click", saveDay);
-document
-  .querySelector("#savePartialDayButton")
-  .addEventListener("click", savePartialDay);
 document.querySelector("#clearDayButton").addEventListener("click", clearDay);
 elements.cancelRestTimerButton.addEventListener("click", cancelRestTimer);
 elements.saveCurrentDayButton.addEventListener("click", saveCurrentDayAndClose);
@@ -2105,6 +2091,10 @@ elements.trainingLocationButtons.forEach((button) => {
     draftLocation = button.dataset.trainingLocation;
     renderTrainingLocation();
   });
+});
+elements.recoveryDayInput.addEventListener("change", (event) => {
+  clearDayStatus();
+  draftRecovery = event.target.checked;
 });
 document.querySelector("#saveCheckinButton").addEventListener("click", saveCheckin);
 document.querySelector("#clearCheckinButton").addEventListener("click", clearCheckin);
